@@ -1,0 +1,30 @@
+APP REQUIREMENTS DOCUMENT
+
+1. OVERVIEW
+A local-first mobile application for tracking group budgets, member contributions, and expenses with automated reporting and threshold alerts.
+
+2. CORE FEATURES
+- Member Contributions: Add money submitted by individual members. Accumulates into the Total Budget.
+- Expense Tracking: Record purchases which are automatically deducted from the Total Budget.
+- Threshold Alerts: Trigger a push notification or in-app alert when the remaining budget drops below a user-defined threshold.
+- Invoicing & Reporting: Generate reports/invoices for individual transactions, and aggregate reports for: Last Week, Last Month, and All-Time.
+- Data Persistence: 100% local storage. All data must be saved locally in JSON format (e.g., using AsyncStorage, SQLite, or similar local storage solution).
+
+3. UI/UX DESIGN SYSTEM
+- Theme: Modern, clean, minimalist personal finance/budgeting app.
+- Primary Color: Gradient (#7B66FF to #5A48D6) for headers, active states, buttons.
+- Background: Crisp white (#FFFFFF) for main content areas.
+- Text: Pure white on gradients, Dark charcoal (#1F2937) for headings, Light gray (#9CA3AF) for secondary text.
+- Accent Colors: Food (Orange), Transport (Deep Blue), Shopping (Bright Green), Fun (Pink), Bills (Purple). Positive indicators (Mint Green).
+- Typography: Clean, modern sans-serif (e.g., SF Pro, Inter). Regular for small text, semibold/bold for numbers/headings.
+- Shapes: 24px-32px border radius on bottom sheets, buttons, and cards.
+
+4. SCREENS
+- Dashboard (Home): Top purple gradient header (Avatar, Date, Notifications). Hero metric (Total Budget/Spent). Stats row. Main white container with spending trend chart, category breakdown progress bars. Bottom navigation with central purple FAB (+ button).
+- Insight: White header. Segmented control (Month, Quarter, Year). Hero metric (spending with comparison badge). Line chart for spending trends. Vertical list of category breakdowns.
+- Add Expense/Contribution: Purple gradient header. Massive input metric for amount. White container with 3x2 category grid, Date/Payment selectors, Notes field, and Receipt attachment area. Full-width purple submit button.
+
+5. ARCHITECTURE & AGILE REQUIREMENTS
+- Modular Components: Code must be broken down into reusable UI components.
+- State Management: Centralized but flexible state handling to easily accommodate future changes.
+- Testing: Automated unit/integration tests must verify budget math, alert triggers, and local storage read/writes.
