@@ -31,7 +31,8 @@
     "android": "expo start --android",
     "ios": "expo start --ios",
     "web": "expo start --web",
-    "test": "tsx --import ./tests/setup.ts tests/run_all_tests.ts"
+    "test": "tsx --import ./tests/setup.ts tests/run_all_tests.ts",
+    "build:apk": "npx eas-cli@latest build -p android --profile preview"
   },
   "private": true
 }

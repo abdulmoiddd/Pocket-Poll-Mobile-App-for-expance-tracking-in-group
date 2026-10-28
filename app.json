@@ -33,7 +33,14 @@
       "favicon": "./assets/favicon.png"
     },
     "plugins": [
-      "expo-local-authentication"
+      "expo-local-authentication",
+      [
+        "expo-image-picker",
+        {
+          "photosPermission": "PocketPool accesses photos to let you attach receipt images to expenses.",
+          "cameraPermission": "PocketPool accesses the camera to take pictures of expense receipts."
+        }
+      ]
     ]
   }
 }
