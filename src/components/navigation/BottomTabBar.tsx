@@ -1,11 +1,11 @@
 import React from 'react';
-import { View, Text, StyleSheet, TouchableOpacity, Platform } from 'react-native';
+import { View, Text, StyleSheet, TouchableOpacity } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { theme } from '../../theme';
-import { LayoutDashboard, PieChart, Settings, Plus } from 'lucide-react-native';
+import { LayoutDashboard, Users, PieChart, Settings, Plus } from 'lucide-react-native';
 
-export type TabName = 'dashboard' | 'insights' | 'settings';
+export type TabName = 'dashboard' | 'members' | 'insights' | 'settings';
 
 interface BottomTabBarProps {
   currentTab: TabName;
@@ -19,12 +19,12 @@ export const BottomTabBar: React.FC<BottomTabBarProps> = ({
   onFabPress,
 }) => {
   const insets = useSafeAreaInsets();
-  const paddingBottom = Math.max(insets.bottom, 12);
+  const paddingBottom = Math.max(insets.bottom, 10);
 
   return (
     <View style={[styles.wrapper, { paddingBottom }]}>
       <View style={styles.bar}>
-        {/* Dashboard Tab */}
+        {/* LEFT OPTION 1: Pool Dashboard */}
         <TouchableOpacity
           onPress={() => onSelectTab('dashboard')}
           style={styles.tabItem}
@@ -46,7 +46,49 @@ export const BottomTabBar: React.FC<BottomTabBarProps> = ({
           </Text>
         </TouchableOpacity>
 
-        {/* Insights Tab */}
+        {/* LEFT OPTION 2: Members Group */}
+        <TouchableOpacity
+          onPress={() => onSelectTab('members')}
+          style={styles.tabItem}
+          accessibilityRole="tab"
+          accessibilityState={{ selected: currentTab === 'members' }}
+          accessibilityLabel="Group Members Tab"
+        >
+          <Users
+            size={22}
+            color={currentTab === 'members' ? theme.colors.primary : theme.colors.textMuted}
+          />
+          <Text
+            style={[
+              styles.tabLabel,
+              currentTab === 'members' && styles.selectedTabLabel,
+            ]}
+          >
+            Members
+          </Text>
+        </TouchableOpacity>
+
+        {/* CENTER: Floating Action Button (+) */}
+        <View style={styles.fabSlot}>
+          <TouchableOpacity
+            onPress={onFabPress}
+            activeOpacity={0.88}
+            style={styles.fabShadow}
+            accessibilityRole="button"
+            accessibilityLabel="Add Expense or Deposit to Pool"
+          >
+            <LinearGradient
+              colors={theme.gradients.primary}
+              start={{ x: 0, y: 0 }}
+              end={{ x: 1, y: 1 }}
+              style={styles.fabGradient}
+            >
+              <Plus size={28} color="#FFFFFF" strokeWidth={3} />
+            </LinearGradient>
+          </TouchableOpacity>
+        </View>
+
+        {/* RIGHT OPTION 1: Insights & Analytics */}
         <TouchableOpacity
           onPress={() => onSelectTab('insights')}
           style={styles.tabItem}
@@ -68,27 +110,7 @@ export const BottomTabBar: React.FC<BottomTabBarProps> = ({
           </Text>
         </TouchableOpacity>
 
-        {/* Central Floating Action Button (+ button) per requirements */}
-        <View style={styles.fabContainer}>
-          <TouchableOpacity
-            onPress={onFabPress}
-            activeOpacity={0.85}
-            style={styles.fabShadow}
-            accessibilityRole="button"
-            accessibilityLabel="Add Expense or Contribution to Pool"
-          >
-            <LinearGradient
-              colors={theme.gradients.primary}
-              start={{ x: 0, y: 0 }}
-              end={{ x: 1, y: 1 }}
-              style={styles.fabGradient}
-            >
-              <Plus size={28} color="#FFFFFF" strokeWidth={2.8} />
-            </LinearGradient>
-          </TouchableOpacity>
-        </View>
-
-        {/* Settings Tab */}
+        {/* RIGHT OPTION 2: Settings */}
         <TouchableOpacity
           onPress={() => onSelectTab('settings')}
           style={styles.tabItem}
@@ -128,9 +150,9 @@ const styles = StyleSheet.create({
   bar: {
     flexDirection: 'row',
     alignItems: 'center',
-    justifyContent: 'space-around',
-    height: 60,
-    paddingHorizontal: 12,
+    justifyContent: 'space-between',
+    height: 64,
+    paddingHorizontal: 8,
   },
   tabItem: {
     flex: 1,
@@ -148,12 +170,12 @@ const styles = StyleSheet.create({
     color: theme.colors.primary,
     fontWeight: '700',
   },
-  fabContainer: {
-    position: 'relative',
-    top: -20,
+  fabSlot: {
+    width: 64,
     alignItems: 'center',
     justifyContent: 'center',
-    width: 68,
+    top: -20,
+    zIndex: 10,
   },
   fabShadow: {
     ...theme.shadows.button,

@@ -79,5 +79,21 @@ const memoryStore = new Map<string, string>();
     };
   }
 
+  if (request === 'expo-image-picker') {
+    return {
+      requestCameraPermissionsAsync: async () => ({ status: 'granted' }),
+      requestMediaLibraryPermissionsAsync: async () => ({ status: 'granted' }),
+      launchCameraAsync: async () => ({
+        canceled: false,
+        assets: [{ uri: 'file:///mock_receipt.jpg', fileName: 'mock_receipt.jpg' }],
+      }),
+      launchImageLibraryAsync: async () => ({
+        canceled: false,
+        assets: [{ uri: 'file:///mock_receipt.jpg', fileName: 'mock_receipt.jpg' }],
+      }),
+      MediaTypeOptions: { Images: 'Images' },
+    };
+  }
+
   return originalLoad.apply(this, arguments);
 };

@@ -4,6 +4,7 @@ import { SafeAreaProvider } from 'react-native-safe-area-context';
 import { PocketPoolProvider, usePocketPool } from './src/context/PocketPoolContext';
 import { SplashScreen } from './src/screens/SplashScreen';
 import { DashboardScreen } from './src/screens/DashboardScreen';
+import { MembersScreen } from './src/screens/MembersScreen';
 import { InsightScreen } from './src/screens/InsightScreen';
 import { AddTransactionScreen } from './src/screens/AddTransactionScreen';
 import { SettingsScreen } from './src/screens/SettingsScreen';
@@ -34,6 +35,15 @@ function MainNavigator() {
             onNavigateToAdd={handleOpenAdd}
             onNavigateToSettings={() => setCurrentTab('settings')}
             onNavigateToInsights={() => setCurrentTab('insights')}
+            onNavigateToMembers={() => setCurrentTab('members')}
+          />
+        )}
+
+        {currentTab === 'members' && (
+          <MembersScreen
+            onQuickDepositForMember={(member) => {
+              handleOpenAdd('contribution');
+            }}
           />
         )}
 
@@ -53,7 +63,7 @@ function MainNavigator() {
         </View>
       )}
 
-      {/* Persistent Bottom Tab Bar */}
+      {/* Symmetrical Bottom Tab Bar: 2 Left (Pool, Members) + Center FAB (+) + 2 Right (Insights, Settings) */}
       {!isAddOpen && (
         <BottomTabBar
           currentTab={currentTab}

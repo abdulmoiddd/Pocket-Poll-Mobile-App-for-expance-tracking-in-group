@@ -21,6 +21,7 @@ export interface Member {
   avatarColor: string;
   avatarText?: string;
   email?: string;
+  phone?: string;
   totalContributed: number;
   totalExpensesPaid?: number;
   joinedAt: string;

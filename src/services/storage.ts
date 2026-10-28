@@ -1,5 +1,6 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { Transaction, Member, AppSettings, ThresholdAlert } from '../types';
+import { SAMPLE_RECEIPT_IMAGE_URI } from './receiptSamples';
 
 const STORAGE_KEYS = {
   TRANSACTIONS: '@pocketpool_transactions_v2',
@@ -130,6 +131,8 @@ export const INITIAL_TRANSACTIONS: Transaction[] = [
     date: '2026-10-22',
     paymentMethod: 'Debit Card',
     notes: 'Group gourmet dinner & wine',
+    receiptName: 'seaside_bistro_receipt.png',
+    receiptUri: SAMPLE_RECEIPT_IMAGE_URI,
     createdAt: Date.now() - 6 * 86400000,
   },
   {
@@ -384,5 +387,6 @@ export const StorageService = {
     await setStorageItem(STORAGE_KEYS.MEMBERS, JSON.stringify(INITIAL_MEMBERS));
     await setStorageItem(STORAGE_KEYS.SETTINGS, JSON.stringify(DEFAULT_SETTINGS));
     await setStorageItem(STORAGE_KEYS.ALERTS, JSON.stringify([]));
+    await setStorageItem(STORAGE_KEYS.INITIALIZED, 'true');
   },
 };

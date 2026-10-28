@@ -43,6 +43,7 @@ export const AddTransactionScreen: React.FC<AddTransactionScreenProps> = ({
   const [selectedPayment, setSelectedPayment] = useState<PaymentMethod>('Credit Card');
   const [date, setDate] = useState<string>(new Date().toISOString().split('T')[0]);
   const [notes, setNotes] = useState('');
+  const [receiptUri, setReceiptUri] = useState<string | undefined>(undefined);
   const [receiptName, setReceiptName] = useState<string | undefined>(undefined);
   const [isSubmitting, setIsSubmitting] = useState(false);
 
@@ -71,6 +72,7 @@ export const AddTransactionScreen: React.FC<AddTransactionScreenProps> = ({
         paymentMethod: selectedPayment,
         notes: notes.trim() || (type === 'contribution' ? 'Pool Contribution' : selectedCategory),
         receiptName,
+        receiptUri,
       });
 
       Alert.alert(
@@ -232,9 +234,16 @@ export const AddTransactionScreen: React.FC<AddTransactionScreenProps> = ({
 
           {/* Receipt Attachment Area */}
           <ReceiptAttachmentArea
+            receiptUri={receiptUri}
             receiptName={receiptName}
-            onAttachReceipt={(name) => setReceiptName(name)}
-            onRemoveReceipt={() => setReceiptName(undefined)}
+            onAttachReceipt={(uri, name) => {
+              setReceiptUri(uri);
+              setReceiptName(name);
+            }}
+            onRemoveReceipt={() => {
+              setReceiptUri(undefined);
+              setReceiptName(undefined);
+            }}
           />
 
           {/* Full-width purple submit button */}

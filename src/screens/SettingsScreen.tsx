@@ -28,6 +28,7 @@ import {
   ShieldCheck,
   ChevronRight,
   FileCode,
+  CheckCircle,
 } from 'lucide-react-native';
 
 export const SettingsScreen: React.FC = () => {
@@ -46,6 +47,9 @@ export const SettingsScreen: React.FC = () => {
   const [newPin, setNewPin] = useState('');
   const [jsonModalVisible, setJsonModalVisible] = useState(false);
   const [jsonBackupText, setJsonBackupText] = useState('');
+  const [resetModalVisible, setResetModalVisible] = useState(false);
+  const [isResetting, setIsResetting] = useState(false);
+  const [resetToast, setResetToast] = useState<string | null>(null);
 
   const handleBiometricToggle = async (value: boolean) => {
     if (value) {
@@ -95,21 +99,21 @@ export const SettingsScreen: React.FC = () => {
   };
 
   const handleReset = () => {
-    Alert.alert(
-      'Reset Local Data',
-      'This will reset transactions and settings back to the initial demo pool state. Continue?',
-      [
-        { text: 'Cancel', style: 'cancel' },
-        {
-          text: 'Reset to Demo',
-          style: 'destructive',
-          onPress: async () => {
-            await resetToDefaults();
-            Alert.alert('Reset Complete', 'Local data has been restored to default demo state.');
-          },
-        },
-      ]
-    );
+    setResetModalVisible(true);
+  };
+
+  const handleConfirmReset = async () => {
+    setIsResetting(true);
+    try {
+      await resetToDefaults();
+      setResetModalVisible(false);
+      setResetToast('Demo pool data and members successfully restored!');
+      setTimeout(() => setResetToast(null), 4000);
+    } catch (err: any) {
+      Alert.alert('Reset Failed', err?.message || 'Could not reset data.');
+    } finally {
+      setIsResetting(false);
+    }
   };
 
   return (
@@ -126,6 +130,13 @@ export const SettingsScreen: React.FC = () => {
           unreadAlerts={unreadAlertsCount}
           onLockPress={settings.biometricEnabled ? lockApp : undefined}
         />
+
+        {resetToast && (
+          <View style={styles.toastBanner}>
+            <CheckCircle size={18} color="#059669" />
+            <Text style={styles.toastText}>{resetToast}</Text>
+          </View>
+        )}
 
         {/* Currency & Localization Picker */}
         <CurrencyPicker
@@ -347,6 +358,46 @@ export const SettingsScreen: React.FC = () => {
           </View>
         </View>
       </Modal>
+
+      {/* Reset to Demo Confirmation Modal */}
+      <Modal
+        visible={resetModalVisible}
+        transparent
+        animationType="fade"
+        onRequestClose={() => setResetModalVisible(false)}
+      >
+        <View style={styles.modalOverlay}>
+          <View style={styles.confirmModalCard}>
+            <View style={styles.dangerIconCircle}>
+              <RotateCcw size={28} color={theme.colors.danger} />
+            </View>
+            <Text style={styles.confirmTitle}>Reset to Demo Pool Data?</Text>
+            <Text style={styles.confirmSubtitle}>
+              This will restore the original demo members (Alex, Sarah, David, Emma), reload the starting contributions, and reset budget thresholds to default.
+            </Text>
+
+            <View style={styles.confirmActions}>
+              <TouchableOpacity
+                onPress={() => setResetModalVisible(false)}
+                disabled={isResetting}
+                style={styles.confirmCancelBtn}
+              >
+                <Text style={styles.confirmCancelText}>Cancel</Text>
+              </TouchableOpacity>
+
+              <TouchableOpacity
+                onPress={handleConfirmReset}
+                disabled={isResetting}
+                style={styles.confirmResetBtn}
+              >
+                <Text style={styles.confirmResetText}>
+                  {isResetting ? 'Resetting...' : 'Yes, Reset to Demo'}
+                </Text>
+              </TouchableOpacity>
+            </View>
+          </View>
+        </View>
+      </Modal>
     </View>
   );
 };
@@ -355,6 +406,87 @@ const styles = StyleSheet.create({
   container: {
     flex: 1,
     backgroundColor: theme.colors.background,
+  },
+  toastBanner: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    backgroundColor: '#ECFDF5',
+    borderWidth: 1.5,
+    borderColor: '#A7F3D0',
+    borderRadius: theme.borderRadius.md,
+    padding: 12,
+    marginHorizontal: 20,
+    marginTop: 12,
+  },
+  toastText: {
+    fontSize: 13,
+    fontWeight: '700',
+    color: '#059669',
+    flex: 1,
+  },
+  confirmModalCard: {
+    width: '90%',
+    maxWidth: 380,
+    backgroundColor: '#FFFFFF',
+    borderRadius: theme.borderRadius.lg,
+    padding: 24,
+    alignItems: 'center',
+    ...theme.shadows.lg,
+  },
+  dangerIconCircle: {
+    width: 56,
+    height: 56,
+    borderRadius: 28,
+    backgroundColor: '#FEE2E2',
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginBottom: 14,
+  },
+  confirmTitle: {
+    fontSize: 18,
+    fontWeight: '800',
+    color: theme.colors.textPrimary,
+    textAlign: 'center',
+  },
+  confirmSubtitle: {
+    fontSize: 13,
+    color: theme.colors.textMuted,
+    textAlign: 'center',
+    marginTop: 8,
+    marginBottom: 20,
+    lineHeight: 18,
+  },
+  confirmActions: {
+    flexDirection: 'row',
+    gap: 10,
+    width: '100%',
+  },
+  confirmCancelBtn: {
+    flex: 1,
+    paddingVertical: 12,
+    alignItems: 'center',
+    borderRadius: theme.borderRadius.full,
+    borderWidth: 1.5,
+    borderColor: theme.colors.border,
+  },
+  confirmCancelText: {
+    fontSize: 14,
+    fontWeight: '600',
+    color: theme.colors.textSecondary,
+  },
+  confirmResetBtn: {
+    flex: 1.2,
+    backgroundColor: theme.colors.danger,
+    paddingVertical: 12,
+    alignItems: 'center',
+    borderRadius: theme.borderRadius.full,
+    ...theme.shadows.button,
+  },
+  confirmResetText: {
+    color: '#FFFFFF',
+    fontSize: 14,
+    fontWeight: '700',
   },
   scrollContent: {
     paddingBottom: 90,

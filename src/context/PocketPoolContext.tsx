@@ -10,6 +10,7 @@ import {
   SpendingTrendPoint,
   ExportFormat,
   ExportTimeframe,
+  PaymentMethod,
 } from '../types';
 import { StorageService, DEFAULT_SETTINGS } from '../services/storage';
 import {
@@ -41,7 +42,21 @@ interface PocketPoolContextType {
   lockApp: () => void;
   addTransaction: (tx: Omit<Transaction, 'id' | 'createdAt'>) => Promise<Transaction>;
   deleteTransaction: (id: string) => Promise<void>;
-  addMember: (name: string, email?: string) => Promise<Member>;
+  addMember: (
+    memberOrName:
+      | string
+      | {
+          name: string;
+          email?: string;
+          phone?: string;
+          avatarColor?: string;
+          initialDeposit?: number;
+          paymentMethod?: PaymentMethod;
+        },
+    email?: string
+  ) => Promise<Member>;
+  deleteMember: (id: string) => Promise<void>;
+  updateMember: (id: string, updates: Partial<Member>) => Promise<void>;
   updateSettings: (newSettings: Partial<AppSettings>) => Promise<void>;
   dismissAlert: (id: string) => Promise<void>;
   markAlertsAsRead: () => Promise<void>;
@@ -182,30 +197,90 @@ export const PocketPoolProvider: React.FC<{ children: ReactNode }> = ({ children
     await StorageService.saveTransactions(updated);
   };
 
-  const addMember = async (name: string, email?: string): Promise<Member> => {
+  const addMember = async (
+    memberOrName:
+      | string
+      | {
+          name: string;
+          email?: string;
+          phone?: string;
+          avatarColor?: string;
+          initialDeposit?: number;
+          paymentMethod?: PaymentMethod;
+        },
+    emailParam?: string
+  ): Promise<Member> => {
+    let name: string;
+    let email: string | undefined;
+    let phone: string | undefined;
+    let avatarColor: string | undefined;
+    let initialDeposit: number | undefined;
+    let paymentMethod: PaymentMethod | undefined;
+
+    if (typeof memberOrName === 'string') {
+      name = memberOrName;
+      email = emailParam;
+    } else {
+      name = memberOrName.name;
+      email = memberOrName.email;
+      phone = memberOrName.phone;
+      avatarColor = memberOrName.avatarColor;
+      initialDeposit = memberOrName.initialDeposit;
+      paymentMethod = memberOrName.paymentMethod;
+    }
+
     const initials = name
+      .trim()
       .split(' ')
       .map((part) => part[0])
+      .filter(Boolean)
       .join('')
       .toUpperCase()
       .slice(0, 2);
 
-    const color = MEMBER_COLORS[members.length % MEMBER_COLORS.length];
+    const color = avatarColor || MEMBER_COLORS[members.length % MEMBER_COLORS.length];
 
     const newMember: Member = {
-      id: `mem_${Date.now()}`,
+      id: `mem_${Date.now()}_${Math.random().toString(36).substr(2, 3)}`,
       name: name.trim(),
       avatarColor: color,
-      avatarText: initials,
+      avatarText: initials || 'PP',
       email: email?.trim(),
-      totalContributed: 0,
+      phone: phone?.trim(),
+      totalContributed: initialDeposit && initialDeposit > 0 ? initialDeposit : 0,
       joinedAt: new Date().toISOString().split('T')[0],
     };
 
     const updated = [...members, newMember];
     setMembers(updated);
     await StorageService.saveMembers(updated);
+
+    // If an initial deposit was specified, automatically record contribution
+    if (initialDeposit && initialDeposit > 0) {
+      await addTransaction({
+        type: 'contribution',
+        amount: initialDeposit,
+        memberId: newMember.id,
+        memberName: newMember.name,
+        date: new Date().toISOString().split('T')[0],
+        paymentMethod: paymentMethod || 'Bank Transfer',
+        notes: `Initial pool deposit upon joining`,
+      });
+    }
+
     return newMember;
+  };
+
+  const deleteMember = async (id: string): Promise<void> => {
+    const updated = members.filter((m) => m.id !== id);
+    setMembers(updated);
+    await StorageService.saveMembers(updated);
+  };
+
+  const updateMember = async (id: string, updates: Partial<Member>): Promise<void> => {
+    const updated = members.map((m) => (m.id === id ? { ...m, ...updates } : m));
+    setMembers(updated);
+    await StorageService.saveMembers(updated);
   };
 
   const updateSettings = async (newSettings: Partial<AppSettings>): Promise<void> => {
@@ -257,11 +332,16 @@ export const PocketPoolProvider: React.FC<{ children: ReactNode }> = ({ children
 
   const resetToDefaults = async (): Promise<void> => {
     await StorageService.resetToDefaults();
-    const data = await StorageService.initialize();
-    setTransactions(data.transactions);
-    setMembers(data.members);
-    setSettings(data.settings);
-    setAlerts(data.alerts);
+    const [txs, mems, sets, alts] = await Promise.all([
+      StorageService.loadTransactions(),
+      StorageService.loadMembers(),
+      StorageService.loadSettings(),
+      StorageService.loadAlerts(),
+    ]);
+    setTransactions([...txs]);
+    setMembers([...mems]);
+    setSettings({ ...sets });
+    setAlerts([...alts]);
   };
 
   const exportJSONBackup = async (): Promise<string> => {
@@ -299,6 +379,8 @@ export const PocketPoolProvider: React.FC<{ children: ReactNode }> = ({ children
         addTransaction,
         deleteTransaction,
         addMember,
+        deleteMember,
+        updateMember,
         updateSettings,
         dismissAlert,
         markAlertsAsRead,
