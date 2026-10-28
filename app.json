@@ -1,0 +1,39 @@
+{
+  "expo": {
+    "name": "PocketPool",
+    "slug": "pocketpool",
+    "version": "1.0.0",
+    "orientation": "portrait",
+    "icon": "./assets/icon.png",
+    "userInterfaceStyle": "light",
+    "splash": {
+      "image": "./assets/splash-icon.png",
+      "resizeMode": "contain",
+      "backgroundColor": "#5A48D6"
+    },
+    "ios": {
+      "supportsTablet": true,
+      "bundleIdentifier": "com.pocketpool.app",
+      "infoPlist": {
+        "NSFaceIDUsageDescription": "PocketPool requires Face ID to secure your financial data."
+      }
+    },
+    "android": {
+      "package": "com.pocketpool.app",
+      "adaptiveIcon": {
+        "foregroundImage": "./assets/android-icon-foreground.png",
+        "backgroundColor": "#5A48D6"
+      },
+      "permissions": [
+        "USE_BIOMETRIC",
+        "USE_FINGERPRINT"
+      ]
+    },
+    "web": {
+      "favicon": "./assets/favicon.png"
+    },
+    "plugins": [
+      "expo-local-authentication"
+    ]
+  }
+}

@@ -1,0 +1,36 @@
+APP REQUIREMENTS DOCUMENT - V2 (Project: PocketPool)
+
+1. OVERVIEW
+A local-first mobile application ("PocketPool") for tracking group budgets, member contributions, and expenses with automated reporting and threshold alerts.
+
+2. CORE FEATURES (UPDATED)
+- Member Contributions: Add money submitted by individual members. Accumulates into the Total Budget.
+- Expense Tracking: Record purchases which are automatically deducted from the Total Budget.
+- Threshold Alerts: Trigger a push notification or in-app alert when the remaining budget drops below a user-defined threshold.
+- Invoicing & Export (New): Generate reports/invoices for individual transactions, and aggregate reports for: Last Week, Last Month, and All-Time. Allow exporting these to PDF and CSV formats.
+- Data Persistence: 100% local storage. All data must be saved locally in JSON format (e.g., using AsyncStorage, SQLite, MMKV, or similar).
+- Security & Privacy (New): Implement Biometric Authentication (FaceID/TouchID/PIN) to unlock the app and protect financial data.
+- Localization (New): Allow users to select their default currency symbol (e.g., €, $, £).
+
+3. BRANDING & UI/UX DESIGN SYSTEM
+- Branding Asset: The app must use the local asset named "logo copy-01" for the App Icon, Splash Screen, and internal header branding. The background of this logo must be removed/transparent so only the icon itself is displayed cleanly against the app's gradients and white backgrounds.
+- Theme: Modern, clean, minimalist personal finance/budgeting app.
+- Primary Color: Gradient (#7B66FF to #5A48D6) for headers, active states, buttons.
+- Background: Crisp white (#FFFFFF) for main content areas.
+- Text: Pure white on gradients, Dark charcoal (#1F2937) for headings, Light gray (#9CA3AF) for secondary text.
+- Accent Colors: Food (Orange), Transport (Deep Blue), Shopping (Bright Green), Fun (Pink), Bills (Purple). Positive indicators (Mint Green).
+- Typography: Clean, modern sans-serif (e.g., SF Pro, Inter). Regular for small text, semibold/bold for numbers/headings.
+- Shapes: 24px-32px border radius on bottom sheets, buttons, and cards.
+
+4. SCREENS
+- Splash Screen (New): Displays the transparent "logo copy-01" centered on the primary purple gradient background.
+- Dashboard (Home): Top purple gradient header (Avatar, Date, Notifications). Hero metric (Total Budget/Spent). Stats row. Main white container with spending trend chart, category breakdown progress bars. Bottom navigation with central purple FAB (+ button).
+- Insight: White header. Segmented control (Month, Quarter, Year). Hero metric (spending with comparison badge). Line chart for spending trends. Vertical list of category breakdowns.
+- Add Expense/Contribution: Purple gradient header. Massive input metric for amount. White container with 3x2 category grid, Date/Payment selectors, Notes field, and Receipt attachment area. Full-width purple submit button.
+- Settings (New): Manage currency, adjust budget alert thresholds, toggle biometric security, and trigger data exports.
+
+5. ARCHITECTURE & AGILE REQUIREMENTS
+- Modular Components: Code must be broken down into reusable UI components.
+- State Management: Centralized but flexible state handling to easily accommodate future changes.
+- Accessibility (New): Ensure high contrast ratios, dynamic text sizing, and proper labels for screen readers.
+- Testing: Automated unit/integration tests must verify budget math, alert triggers, export logic, and local storage read/writes.
