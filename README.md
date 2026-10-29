@@ -1,12 +1,12 @@
-# PocketPool 🎱💸
-
+# PocketPool 💸
+<!-- 
 <p align="center">
   <img src="./assets/icon.png" width="120" height="120" alt="PocketPool Icon" style="border-radius: 28px;" />
 </p>
 
 <p align="center">
   <strong>Modern, Offline-First Mobile Application for Group Expense Tracking & Pool Budget Management</strong>
-</p>
+</p> -->
 
 <p align="center">
   <img src="https://img.shields.io/badge/React%20Native-0.88.1-61DAFB?logo=react&logoColor=black" alt="React Native" />
