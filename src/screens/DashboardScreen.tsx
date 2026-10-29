@@ -57,6 +57,7 @@ export const DashboardScreen: React.FC<DashboardScreenProps> = ({
   const {
     budget,
     transactions,
+    members,
     settings,
     alerts,
     categorySummaries,
@@ -147,7 +148,7 @@ export const DashboardScreen: React.FC<DashboardScreenProps> = ({
             >
               <Users size={16} color="#FFFFFF" />
               <Text style={styles.groupHeaderBadgeText}>
-                {budget.activeMembersCount}
+                {members.length}
               </Text>
             </TouchableOpacity>
           }
@@ -225,7 +226,7 @@ export const DashboardScreen: React.FC<DashboardScreenProps> = ({
         <StatsRow
           totalBudget={budget.totalBudget}
           totalExpenses={budget.totalExpenses}
-          activeMembersCount={budget.activeMembersCount}
+          activeMembersCount={members.length}
           currencySymbol={settings.currencySymbol}
         />
 

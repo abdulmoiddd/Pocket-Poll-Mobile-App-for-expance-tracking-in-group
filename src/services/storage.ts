@@ -380,11 +380,22 @@ export const StorageService = {
   },
 
   /**
-   * Reset data back to default demo state
+   * Reset data back to default demo state (restores 4 sample members & transactions)
    */
   async resetToDefaults(): Promise<void> {
     await setStorageItem(STORAGE_KEYS.TRANSACTIONS, JSON.stringify(INITIAL_TRANSACTIONS));
     await setStorageItem(STORAGE_KEYS.MEMBERS, JSON.stringify(INITIAL_MEMBERS));
+    await setStorageItem(STORAGE_KEYS.SETTINGS, JSON.stringify(DEFAULT_SETTINGS));
+    await setStorageItem(STORAGE_KEYS.ALERTS, JSON.stringify([]));
+    await setStorageItem(STORAGE_KEYS.INITIALIZED, 'true');
+  },
+
+  /**
+   * Reset data to completely empty default state (0 members, 0 transactions, 0 entries)
+   */
+  async resetToZero(): Promise<void> {
+    await setStorageItem(STORAGE_KEYS.TRANSACTIONS, JSON.stringify([]));
+    await setStorageItem(STORAGE_KEYS.MEMBERS, JSON.stringify([]));
     await setStorageItem(STORAGE_KEYS.SETTINGS, JSON.stringify(DEFAULT_SETTINGS));
     await setStorageItem(STORAGE_KEYS.ALERTS, JSON.stringify([]));
     await setStorageItem(STORAGE_KEYS.INITIALIZED, 'true');

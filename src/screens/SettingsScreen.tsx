@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import {
   View,
   Text,
@@ -24,11 +24,13 @@ import {
   KeyRound,
   Database,
   RotateCcw,
-  Info,
-  ShieldCheck,
+  Trash2,
+  Save,
+  CheckCircle,
+  AlertTriangle,
   ChevronRight,
   FileCode,
-  CheckCircle,
+  Users,
 } from 'lucide-react-native';
 
 export const SettingsScreen: React.FC = () => {
@@ -37,23 +39,78 @@ export const SettingsScreen: React.FC = () => {
     updateSettings,
     exportReport,
     resetToDefaults,
+    resetToZero,
     exportJSONBackup,
     importJSONBackup,
     lockApp,
     unreadAlertsCount,
   } = usePocketPool();
 
+  // Draft / Staged preferences state
+  const [draftSymbol, setDraftSymbol] = useState(settings.currencySymbol);
+  const [draftCode, setDraftCode] = useState(settings.currencyCode);
+  const [draftThreshold, setDraftThreshold] = useState(settings.thresholdAmount);
+  const [draftGroupName, setDraftGroupName] = useState(settings.groupName);
+  const [isSavingSettings, setIsSavingSettings] = useState(false);
+  const [saveSuccessToast, setSaveSuccessToast] = useState<string | null>(null);
+
+  // Modals & Reset state
   const [pinModalVisible, setPinModalVisible] = useState(false);
   const [newPin, setNewPin] = useState('');
   const [jsonModalVisible, setJsonModalVisible] = useState(false);
   const [jsonBackupText, setJsonBackupText] = useState('');
-  const [resetModalVisible, setResetModalVisible] = useState(false);
+  const [resetModalMode, setResetModalMode] = useState<'demo' | 'zero' | null>(null);
   const [isResetting, setIsResetting] = useState(false);
   const [resetToast, setResetToast] = useState<string | null>(null);
 
+  // Sync draft state if settings are updated externally (e.g. after reset)
+  useEffect(() => {
+    setDraftSymbol(settings.currencySymbol);
+    setDraftCode(settings.currencyCode);
+    setDraftThreshold(settings.thresholdAmount);
+    setDraftGroupName(settings.groupName);
+  }, [
+    settings.currencySymbol,
+    settings.currencyCode,
+    settings.thresholdAmount,
+    settings.groupName,
+  ]);
+
+  const hasUnsavedChanges =
+    draftSymbol !== settings.currencySymbol ||
+    draftCode !== settings.currencyCode ||
+    draftThreshold !== settings.thresholdAmount ||
+    draftGroupName.trim() !== settings.groupName;
+
+  const handleSaveSettings = async () => {
+    setIsSavingSettings(true);
+    try {
+      await updateSettings({
+        currencySymbol: draftSymbol,
+        currencyCode: draftCode,
+        thresholdAmount: draftThreshold,
+        groupName: draftGroupName.trim() || settings.groupName,
+      });
+      setSaveSuccessToast(
+        `Settings saved! Currency updated to ${draftSymbol} (${draftCode}) and threshold set to ${draftSymbol}${draftThreshold}.`
+      );
+      setTimeout(() => setSaveSuccessToast(null), 4000);
+    } catch (err: any) {
+      Alert.alert('Save Failed', err?.message || 'Could not save settings.');
+    } finally {
+      setIsSavingSettings(false);
+    }
+  };
+
+  const handleDiscardChanges = () => {
+    setDraftSymbol(settings.currencySymbol);
+    setDraftCode(settings.currencyCode);
+    setDraftThreshold(settings.thresholdAmount);
+    setDraftGroupName(settings.groupName);
+  };
+
   const handleBiometricToggle = async (value: boolean) => {
     if (value) {
-      // Check hardware capability
       const status = await BiometricsService.checkAvailability();
       if (!status.hasHardware) {
         Alert.alert(
@@ -98,16 +155,18 @@ export const SettingsScreen: React.FC = () => {
     }
   };
 
-  const handleReset = () => {
-    setResetModalVisible(true);
-  };
-
   const handleConfirmReset = async () => {
+    if (!resetModalMode) return;
     setIsResetting(true);
     try {
-      await resetToDefaults();
-      setResetModalVisible(false);
-      setResetToast('Demo pool data and members successfully restored!');
+      if (resetModalMode === 'zero') {
+        await resetToZero();
+        setResetToast('App reset to clean zero state! 0 members, 0 transactions.');
+      } else {
+        await resetToDefaults();
+        setResetToast('Demo pool data and 4 members successfully restored!');
+      }
+      setResetModalMode(null);
       setTimeout(() => setResetToast(null), 4000);
     } catch (err: any) {
       Alert.alert('Reset Failed', err?.message || 'Could not reset data.');
@@ -131,6 +190,15 @@ export const SettingsScreen: React.FC = () => {
           onLockPress={settings.biometricEnabled ? lockApp : undefined}
         />
 
+        {/* Success Save Banner */}
+        {saveSuccessToast && (
+          <View style={styles.toastBanner}>
+            <CheckCircle size={18} color="#059669" />
+            <Text style={styles.toastText}>{saveSuccessToast}</Text>
+          </View>
+        )}
+
+        {/* Reset Feedback Banner */}
         {resetToast && (
           <View style={styles.toastBanner}>
             <CheckCircle size={18} color="#059669" />
@@ -138,21 +206,119 @@ export const SettingsScreen: React.FC = () => {
           </View>
         )}
 
+        {/* Unsaved Changes Banner */}
+        {hasUnsavedChanges && (
+          <View style={styles.unsavedBanner}>
+            <View style={styles.unsavedBannerLeft}>
+              <AlertTriangle size={18} color="#D97706" />
+              <Text style={styles.unsavedBannerText}>
+                You have unsaved changes. Tap "Save Settings" below to apply.
+              </Text>
+            </View>
+            <TouchableOpacity
+              style={styles.quickSaveBtn}
+              onPress={handleSaveSettings}
+              disabled={isSavingSettings}
+              accessibilityRole="button"
+              accessibilityLabel="Quick save settings button"
+            >
+              <Text style={styles.quickSaveBtnText}>Save Now</Text>
+            </TouchableOpacity>
+          </View>
+        )}
+
+        {/* Group / Pool Name Card */}
+        <View style={styles.card}>
+          <Text style={styles.cardTitle}>Pool / Group Name</Text>
+          <Text style={styles.cardSubtitle}>
+            The display name shown across the app for this pool.
+          </Text>
+          <TextInput
+            style={styles.groupInput}
+            value={draftGroupName}
+            onChangeText={setDraftGroupName}
+            placeholder="e.g. Summer Trip Pool 2026"
+            placeholderTextColor="#94A3B8"
+            accessibilityLabel="Group name input"
+          />
+        </View>
+
         {/* Currency & Localization Picker */}
         <CurrencyPicker
-          selectedSymbol={settings.currencySymbol}
-          selectedCode={settings.currencyCode}
-          onSelectCurrency={(symbol, code) =>
-            updateSettings({ currencySymbol: symbol, currencyCode: code })
-          }
+          selectedSymbol={draftSymbol}
+          selectedCode={draftCode}
+          onSelectCurrency={(symbol, code) => {
+            setDraftSymbol(symbol);
+            setDraftCode(code);
+          }}
         />
 
         {/* Budget Alert Threshold Slider */}
         <ThresholdSlider
-          thresholdAmount={settings.thresholdAmount}
-          currencySymbol={settings.currencySymbol}
-          onUpdateThreshold={(amount) => updateSettings({ thresholdAmount: amount })}
+          thresholdAmount={draftThreshold}
+          currencySymbol={draftSymbol}
+          onUpdateThreshold={(amount) => setDraftThreshold(amount)}
         />
+
+        {/* Prominent Save Configuration Card */}
+        <View style={[styles.card, hasUnsavedChanges && styles.saveCardActive]}>
+          <View style={styles.saveHeaderRow}>
+            <View style={{ flex: 1, marginRight: 10 }}>
+              <Text style={styles.cardTitle}>Save Configuration</Text>
+              <Text style={styles.cardSubtitle}>
+                {hasUnsavedChanges
+                  ? `Pending changes: ${
+                      draftSymbol !== settings.currencySymbol
+                        ? `Currency (${draftSymbol}) `
+                        : ''
+                    }${
+                      draftThreshold !== settings.thresholdAmount
+                        ? `Threshold (${draftSymbol}${draftThreshold}) `
+                        : ''
+                    }${
+                      draftGroupName.trim() !== settings.groupName
+                        ? `Group Name ("${draftGroupName.trim()}")`
+                        : ''
+                    }`
+                  : 'All preferences are saved and active throughout the application.'}
+              </Text>
+            </View>
+            {hasUnsavedChanges && (
+              <View style={styles.unsavedBadge}>
+                <Text style={styles.unsavedBadgeText}>Unsaved</Text>
+              </View>
+            )}
+          </View>
+
+          <View style={styles.saveButtonsRow}>
+            <TouchableOpacity
+              style={[
+                styles.primarySaveBtn,
+                !hasUnsavedChanges && styles.primarySaveBtnDisabled,
+              ]}
+              onPress={handleSaveSettings}
+              disabled={!hasUnsavedChanges || isSavingSettings}
+              accessibilityRole="button"
+              accessibilityLabel="Save settings changes"
+            >
+              <Save size={18} color="#FFFFFF" />
+              <Text style={styles.primarySaveBtnText}>
+                {isSavingSettings ? 'Saving Settings...' : 'Save Settings'}
+              </Text>
+            </TouchableOpacity>
+
+            {hasUnsavedChanges && (
+              <TouchableOpacity
+                style={styles.discardBtn}
+                onPress={handleDiscardChanges}
+                accessibilityRole="button"
+                accessibilityLabel="Discard unsaved changes"
+              >
+                <Text style={styles.discardBtnText}>Discard</Text>
+              </TouchableOpacity>
+            )}
+          </View>
+        </View>
 
         {/* Invoicing & Data Export (PDF & CSV) */}
         <ExportManager
@@ -238,27 +404,63 @@ export const SettingsScreen: React.FC = () => {
               </View>
               <View>
                 <Text style={styles.settingLabel}>JSON Database Manager</Text>
-                <Text style={styles.settingDesc}>Backup, inspect, or restore raw JSON data</Text>
+                <Text style={styles.settingDesc}>
+                  View, export raw JSON, or restore database from backup
+                </Text>
+              </View>
+            </View>
+            <ChevronRight size={18} color={theme.colors.textMuted} />
+          </TouchableOpacity>
+        </View>
+
+        {/* Two Data Reset Options */}
+        <View style={styles.card}>
+          <Text style={styles.cardTitle}>Data Reset Options</Text>
+          <Text style={styles.cardSubtitle}>
+            Choose between wiping all entries to zero or restoring the sample demo data.
+          </Text>
+
+          {/* Option 1: Reset App to Zero (Clean Slate) */}
+          <TouchableOpacity
+            style={styles.settingRow}
+            onPress={() => setResetModalMode('zero')}
+            accessibilityRole="button"
+            accessibilityLabel="Reset app to default zero state without demo data"
+          >
+            <View style={styles.settingInfo}>
+              <View style={[styles.iconBox, { backgroundColor: '#FEE2E2' }]}>
+                <Trash2 size={20} color="#DC2626" />
+              </View>
+              <View style={{ flex: 1 }}>
+                <Text style={[styles.settingLabel, { color: '#DC2626' }]}>
+                  Reset App to Zero (Clean Default)
+                </Text>
+                <Text style={styles.settingDesc}>
+                  Wipe all transactions, members, and expenses. Set everything to zero with no demo data.
+                </Text>
               </View>
             </View>
             <ChevronRight size={18} color={theme.colors.textMuted} />
           </TouchableOpacity>
 
+          {/* Option 2: Restore Sample Demo Data */}
           <TouchableOpacity
-            style={styles.settingRow}
-            onPress={handleReset}
+            style={[styles.settingRow, { borderBottomWidth: 0, marginTop: 4 }]}
+            onPress={() => setResetModalMode('demo')}
             accessibilityRole="button"
-            accessibilityLabel="Reset database to default demo data"
+            accessibilityLabel="Restore 4 sample members and demo transactions"
           >
             <View style={styles.settingInfo}>
-              <View style={[styles.iconBox, { backgroundColor: '#FEE2E2' }]}>
-                <RotateCcw size={20} color={theme.colors.danger} />
+              <View style={[styles.iconBox, { backgroundColor: '#EDE9FE' }]}>
+                <RotateCcw size={20} color={theme.colors.primary} />
               </View>
-              <View>
-                <Text style={[styles.settingLabel, { color: theme.colors.danger }]}>
-                  Reset Demo Pool Data
+              <View style={{ flex: 1 }}>
+                <Text style={[styles.settingLabel, { color: theme.colors.primary }]}>
+                  Reset to Demo Data
                 </Text>
-                <Text style={styles.settingDesc}>Restore original demo contributions and expenses</Text>
+                <Text style={styles.settingDesc}>
+                  Restore 4 sample members (Alex, Sarah, David, Emma) and initial demo transactions.
+                </Text>
               </View>
             </View>
             <ChevronRight size={18} color={theme.colors.textMuted} />
@@ -359,26 +561,46 @@ export const SettingsScreen: React.FC = () => {
         </View>
       </Modal>
 
-      {/* Reset to Demo Confirmation Modal */}
+      {/* Reset Confirmation Modal (Handles both 'zero' and 'demo' modes) */}
       <Modal
-        visible={resetModalVisible}
+        visible={resetModalMode !== null}
         transparent
         animationType="fade"
-        onRequestClose={() => setResetModalVisible(false)}
+        onRequestClose={() => setResetModalMode(null)}
       >
         <View style={styles.modalOverlay}>
           <View style={styles.confirmModalCard}>
-            <View style={styles.dangerIconCircle}>
-              <RotateCcw size={28} color={theme.colors.danger} />
+            <View
+              style={[
+                styles.dangerIconCircle,
+                {
+                  backgroundColor:
+                    resetModalMode === 'zero' ? '#FEE2E2' : '#EDE9FE',
+                },
+              ]}
+            >
+              {resetModalMode === 'zero' ? (
+                <Trash2 size={28} color="#DC2626" />
+              ) : (
+                <RotateCcw size={28} color={theme.colors.primary} />
+              )}
             </View>
-            <Text style={styles.confirmTitle}>Reset to Demo Pool Data?</Text>
+
+            <Text style={styles.confirmTitle}>
+              {resetModalMode === 'zero'
+                ? 'Reset App to Zero (Clean Default)?'
+                : 'Reset to Sample Demo Data?'}
+            </Text>
+
             <Text style={styles.confirmSubtitle}>
-              This will restore the original demo members (Alex, Sarah, David, Emma), reload the starting contributions, and reset budget thresholds to default.
+              {resetModalMode === 'zero'
+                ? 'This will wipe all transactions, expenses, contributions, and members, setting everything to zero ($0.00). No demo data will be loaded. Your pool will be completely empty and ready for your real entries.'
+                : 'This will restore the 4 original sample members (Alex, Sarah, David, Emma) and reload the starting demo transactions ($2,800 budget, $1,850 expenses).'}
             </Text>
 
             <View style={styles.confirmActions}>
               <TouchableOpacity
-                onPress={() => setResetModalVisible(false)}
+                onPress={() => setResetModalMode(null)}
                 disabled={isResetting}
                 style={styles.confirmCancelBtn}
               >
@@ -388,10 +610,22 @@ export const SettingsScreen: React.FC = () => {
               <TouchableOpacity
                 onPress={handleConfirmReset}
                 disabled={isResetting}
-                style={styles.confirmResetBtn}
+                style={[
+                  styles.confirmResetBtn,
+                  {
+                    backgroundColor:
+                      resetModalMode === 'zero'
+                        ? '#DC2626'
+                        : theme.colors.primary,
+                  },
+                ]}
               >
                 <Text style={styles.confirmResetText}>
-                  {isResetting ? 'Resetting...' : 'Yes, Reset to Demo'}
+                  {isResetting
+                    ? 'Resetting...'
+                    : resetModalMode === 'zero'
+                    ? 'Yes, Wipe to Zero'
+                    : 'Yes, Restore Demo'}
                 </Text>
               </TouchableOpacity>
             </View>
@@ -424,6 +658,117 @@ const styles = StyleSheet.create({
     fontWeight: '700',
     color: '#059669',
     flex: 1,
+  },
+  unsavedBanner: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    backgroundColor: '#FFFBEB',
+    borderWidth: 1.5,
+    borderColor: '#FDE68A',
+    borderRadius: theme.borderRadius.md,
+    padding: 12,
+    marginHorizontal: 20,
+    marginTop: 12,
+    gap: 10,
+  },
+  unsavedBannerLeft: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    flex: 1,
+  },
+  unsavedBannerText: {
+    fontSize: 12,
+    fontWeight: '700',
+    color: '#B45309',
+    flex: 1,
+  },
+  quickSaveBtn: {
+    backgroundColor: '#D97706',
+    paddingVertical: 6,
+    paddingHorizontal: 12,
+    borderRadius: theme.borderRadius.full,
+  },
+  quickSaveBtnText: {
+    color: '#FFFFFF',
+    fontSize: 12,
+    fontWeight: '700',
+  },
+  groupInput: {
+    backgroundColor: '#F8FAFC',
+    borderWidth: 1.5,
+    borderColor: theme.colors.border,
+    borderRadius: theme.borderRadius.md,
+    paddingHorizontal: 16,
+    paddingVertical: 12,
+    fontSize: 15,
+    fontWeight: '600',
+    color: theme.colors.textPrimary,
+  },
+  saveCardActive: {
+    borderColor: theme.colors.primary,
+    borderWidth: 2,
+    backgroundColor: '#FAFAFF',
+  },
+  saveHeaderRow: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    justifyContent: 'space-between',
+  },
+  unsavedBadge: {
+    backgroundColor: '#FEF3C7',
+    paddingHorizontal: 10,
+    paddingVertical: 4,
+    borderRadius: 8,
+    borderWidth: 1,
+    borderColor: '#FDE68A',
+  },
+  unsavedBadgeText: {
+    color: '#B45309',
+    fontSize: 11,
+    fontWeight: '800',
+    textTransform: 'uppercase',
+  },
+  saveButtonsRow: {
+    flexDirection: 'row',
+    gap: 10,
+    marginTop: 8,
+  },
+  primarySaveBtn: {
+    flex: 1,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: theme.colors.primary,
+    paddingVertical: 14,
+    borderRadius: theme.borderRadius.full,
+    gap: 8,
+    ...theme.shadows.button,
+  },
+  primarySaveBtnDisabled: {
+    backgroundColor: '#CBD5E1',
+    shadowOpacity: 0,
+    elevation: 0,
+  },
+  primarySaveBtnText: {
+    color: '#FFFFFF',
+    fontSize: 15,
+    fontWeight: '700',
+  },
+  discardBtn: {
+    paddingVertical: 14,
+    paddingHorizontal: 20,
+    borderRadius: theme.borderRadius.full,
+    borderWidth: 1.5,
+    borderColor: theme.colors.border,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  discardBtnText: {
+    color: theme.colors.textSecondary,
+    fontSize: 14,
+    fontWeight: '600',
   },
   confirmModalCard: {
     width: '90%',
@@ -476,7 +821,7 @@ const styles = StyleSheet.create({
     color: theme.colors.textSecondary,
   },
   confirmResetBtn: {
-    flex: 1.2,
+    flex: 1.3,
     backgroundColor: theme.colors.danger,
     paddingVertical: 12,
     alignItems: 'center',
@@ -544,6 +889,7 @@ const styles = StyleSheet.create({
     fontSize: 11,
     color: theme.colors.textMuted,
     marginTop: 1,
+    lineHeight: 15,
   },
   lockNowBtn: {
     flexDirection: 'row',

@@ -116,6 +116,13 @@ export async function runLocalStorageTests(): Promise<boolean> {
   const restoredTxs = await StorageService.loadTransactions();
   assert(restoredTxs.length === 1 && restoredTxs[0].id === 'tx_tokyo_1', 'Restored transactions match imported JSON');
 
+  // Test resetToZero
+  await StorageService.resetToZero();
+  const zeroTxs = await StorageService.loadTransactions();
+  const zeroMembers = await StorageService.loadMembers();
+  assert(zeroTxs.length === 0, 'Storage resetToZero clears all transactions to 0');
+  assert(zeroMembers.length === 0, 'Storage resetToZero clears all members to 0');
+
   // Clean up: Reset back to demo defaults
   await StorageService.resetToDefaults();
   const resetTxs = await StorageService.loadTransactions();

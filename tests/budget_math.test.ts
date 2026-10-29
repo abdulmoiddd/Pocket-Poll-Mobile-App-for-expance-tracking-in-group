@@ -128,6 +128,14 @@ export function runBudgetMathTests(): boolean {
   assert(summary3.isBelowThreshold === true, 'Budget deficit correctly flags isBelowThreshold as true');
   assert(summary3.percentageSpent === 100, 'Percentage spent caps at 100% during deficit');
 
+  // Test 4: Member Deletion and Active Member Count
+  assert(summary1.activeMembersCount === 2, 'Initial active members count reflects 2 members');
+  const singleMember = [dummyMembers[0]];
+  const summarySingle = calculateBudgetSummary(contributions, 200, singleMember);
+  assert(summarySingle.activeMembersCount === 1, 'activeMembersCount correctly reflects member deletion (2 -> 1)');
+  const summaryZero = calculateBudgetSummary(contributions, 200, []);
+  assert(summaryZero.activeMembersCount === 0, 'activeMembersCount is 0 when all members are removed');
+
   console.log(`✨ Budget Math Suite Passed: ${passed}/${total} assertions.\n`);
   return true;
 }

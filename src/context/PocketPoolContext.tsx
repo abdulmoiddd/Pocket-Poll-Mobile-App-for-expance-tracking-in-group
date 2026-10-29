@@ -66,6 +66,7 @@ interface PocketPoolContextType {
     specificTransactionId?: string
   ) => Promise<{ success: boolean; filePath?: string; uri?: string }>;
   resetToDefaults: () => Promise<void>;
+  resetToZero: () => Promise<void>;
   exportJSONBackup: () => Promise<string>;
   importJSONBackup: (json: string) => Promise<boolean>;
 }
@@ -344,6 +345,14 @@ export const PocketPoolProvider: React.FC<{ children: ReactNode }> = ({ children
     setAlerts([...alts]);
   };
 
+  const resetToZero = async (): Promise<void> => {
+    await StorageService.resetToZero();
+    setTransactions([]);
+    setMembers([]);
+    setSettings({ ...DEFAULT_SETTINGS });
+    setAlerts([]);
+  };
+
   const exportJSONBackup = async (): Promise<string> => {
     return StorageService.exportFullDatabaseJSON();
   };
@@ -386,6 +395,7 @@ export const PocketPoolProvider: React.FC<{ children: ReactNode }> = ({ children
         markAlertsAsRead,
         exportReport,
         resetToDefaults,
+        resetToZero,
         exportJSONBackup,
         importJSONBackup,
       }}

@@ -19,7 +19,7 @@ import { theme } from '../theme';
 export function calculateBudgetSummary(
   transactions: Transaction[],
   thresholdAmount: number,
-  members: Member[] = []
+  members?: Member[]
 ): BudgetSummary {
   let totalContributions = 0;
   let totalExpenses = 0;
@@ -54,7 +54,7 @@ export function calculateBudgetSummary(
     percentageSpent: Math.round(percentageSpent * 10) / 10,
     isBelowThreshold,
     thresholdAmount,
-    activeMembersCount: Math.max(contributingMemberIds.size, members.length),
+    activeMembersCount: members !== undefined ? members.length : contributingMemberIds.size,
   };
 }
 
