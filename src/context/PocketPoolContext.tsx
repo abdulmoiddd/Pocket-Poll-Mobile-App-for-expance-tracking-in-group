@@ -22,6 +22,7 @@ import {
 } from '../services/calculations';
 import { exportToCSV, exportToPDF } from '../services/export';
 import { BiometricsService } from '../services/biometrics';
+import { useToast } from './ToastContext';
 
 interface PocketPoolContextType {
   // State
@@ -76,6 +77,14 @@ const PocketPoolContext = createContext<PocketPoolContextType | undefined>(undef
 const MEMBER_COLORS = ['#6366F1', '#EC4899', '#10B981', '#F59E0B', '#3B82F6', '#8B5CF6', '#14B8A6'];
 
 export const PocketPoolProvider: React.FC<{ children: ReactNode }> = ({ children }) => {
+  let toastApi: ReturnType<typeof useToast>['toast'] | undefined;
+  try {
+    const t = useToast();
+    toastApi = t.toast;
+  } catch {
+    // Graceful fallback if rendered without ToastProvider
+  }
+
   const [isLoading, setIsLoading] = useState(true);
   const [isLocked, setIsLocked] = useState(false);
   const [transactions, setTransactions] = useState<Transaction[]>([]);
@@ -187,6 +196,21 @@ export const PocketPoolProvider: React.FC<{ children: ReactNode }> = ({ children
       const updatedAlerts = [newAlert, ...alerts];
       setAlerts(updatedAlerts);
       await StorageService.saveAlerts(updatedAlerts);
+
+      // Trigger interactive toaster notification on mobile
+      if (toastApi) {
+        if (alertCheck.alertType === 'danger') {
+          toastApi.danger('🚨 Budget Deficit Alert!', alertCheck.message, {
+            actionText: 'Review Pool',
+            duration: 6000,
+          });
+        } else {
+          toastApi.warning('⚠️ Low Budget Alert!', alertCheck.message, {
+            actionText: 'Settings',
+            duration: 5000,
+          });
+        }
+      }
     }
 
     return newTransaction;

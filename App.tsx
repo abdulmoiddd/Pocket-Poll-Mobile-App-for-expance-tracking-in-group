@@ -2,6 +2,7 @@ import React, { useState } from 'react';
 import { StyleSheet, View, StatusBar } from 'react-native';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
 import { PocketPoolProvider, usePocketPool } from './src/context/PocketPoolContext';
+import { ToastProvider } from './src/context/ToastContext';
 import { SplashScreen } from './src/screens/SplashScreen';
 import { DashboardScreen } from './src/screens/DashboardScreen';
 import { MembersScreen } from './src/screens/MembersScreen';
@@ -89,13 +90,15 @@ export default function App() {
 
   return (
     <SafeAreaProvider>
-      <PocketPoolProvider>
-        {!isSplashDone ? (
-          <SplashScreen onFinish={() => setIsSplashDone(true)} />
-        ) : (
-          <MainNavigator />
-        )}
-      </PocketPoolProvider>
+      <ToastProvider>
+        <PocketPoolProvider>
+          {!isSplashDone ? (
+            <SplashScreen onFinish={() => setIsSplashDone(true)} />
+          ) : (
+            <MainNavigator />
+          )}
+        </PocketPoolProvider>
+      </ToastProvider>
     </SafeAreaProvider>
   );
 }

@@ -6,11 +6,11 @@ import {
   ScrollView,
   TextInput,
   TouchableOpacity,
-  Alert,
   KeyboardAvoidingView,
   Platform,
 } from 'react-native';
 import { usePocketPool } from '../context/PocketPoolContext';
+import { useToast } from '../context/ToastContext';
 import { Header } from '../components/common/Header';
 import { CategoryGrid } from '../components/transaction/CategoryGrid';
 import { MemberSelector } from '../components/transaction/MemberSelector';
@@ -33,6 +33,7 @@ export const AddTransactionScreen: React.FC<AddTransactionScreenProps> = ({
   onCancel,
 }) => {
   const { members, settings, addTransaction, addMember } = usePocketPool();
+  const { toast } = useToast();
 
   const [type, setType] = useState<TransactionType>(initialType);
   const [amountStr, setAmountStr] = useState('');
@@ -50,13 +51,13 @@ export const AddTransactionScreen: React.FC<AddTransactionScreenProps> = ({
   const handleSubmit = async () => {
     const numericAmount = parseFloat(amountStr);
     if (isNaN(numericAmount) || numericAmount <= 0) {
-      Alert.alert('Invalid Amount', 'Please enter a valid amount greater than zero.');
+      toast.error('Invalid Amount', 'Please enter a valid amount greater than zero.');
       return;
     }
 
     const member = members.find((m) => m.id === selectedMemberId) || members[0];
     if (!member) {
-      Alert.alert('Member Required', 'Please select or add a member.');
+      toast.error('Member Required', 'Please select or add a member to attribute this transaction.');
       return;
     }
 
@@ -75,19 +76,19 @@ export const AddTransactionScreen: React.FC<AddTransactionScreenProps> = ({
         receiptUri,
       });
 
-      Alert.alert(
-        'Transaction Recorded',
+      toast.success(
+        type === 'contribution' ? 'Deposit Recorded' : 'Expense Recorded',
         type === 'contribution'
           ? `Added ${settings.currencySymbol}${numericAmount.toFixed(
               2
             )} deposit to pool from ${member.name}.`
           : `Recorded ${settings.currencySymbol}${numericAmount.toFixed(
               2
-            )} expense for ${selectedCategory}.`,
-        [{ text: 'OK', onPress: onSuccess }]
+            )} expense for ${selectedCategory}.`
       );
+      onSuccess();
     } catch (err: any) {
-      Alert.alert('Error', err?.message || 'Failed to save transaction.');
+      toast.error('Error', err?.message || 'Failed to save transaction.');
     } finally {
       setIsSubmitting(false);
     }
@@ -97,11 +98,14 @@ export const AddTransactionScreen: React.FC<AddTransactionScreenProps> = ({
     <KeyboardAvoidingView
       style={styles.flex}
       behavior={Platform.OS === 'ios' ? 'padding' : undefined}
+      keyboardVerticalOffset={Platform.OS === 'ios' ? 10 : 0}
     >
       <ScrollView
         style={styles.container}
         showsVerticalScrollIndicator={false}
-        contentContainerStyle={styles.scrollContent}
+        contentContainerStyle={[styles.scrollContent, { paddingBottom: 160 }]}
+        keyboardShouldPersistTaps="handled"
+        keyboardDismissMode="interactive"
       >
         {/* Purple Gradient Header per requirements */}
         <Header
@@ -163,6 +167,7 @@ export const AddTransactionScreen: React.FC<AddTransactionScreenProps> = ({
               placeholder="0.00"
               placeholderTextColor="rgba(255, 255, 255, 0.45)"
               keyboardType="decimal-pad"
+              inputMode="decimal"
               value={amountStr}
               onChangeText={setAmountStr}
               autoFocus

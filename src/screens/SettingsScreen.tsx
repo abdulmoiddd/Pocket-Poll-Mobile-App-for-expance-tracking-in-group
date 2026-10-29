@@ -10,6 +10,7 @@ import {
   TextInput,
   Modal,
   Platform,
+  KeyboardAvoidingView,
 } from 'react-native';
 import { usePocketPool } from '../context/PocketPoolContext';
 import { Header } from '../components/common/Header';
@@ -17,6 +18,7 @@ import { CurrencyPicker } from '../components/settings/CurrencyPicker';
 import { ThresholdSlider } from '../components/settings/ThresholdSlider';
 import { ExportManager } from '../components/settings/ExportManager';
 import { theme } from '../theme';
+import { useToast } from '../context/ToastContext';
 import { BiometricsService } from '../services/biometrics';
 import {
   Fingerprint,
@@ -45,6 +47,7 @@ export const SettingsScreen: React.FC = () => {
     lockApp,
     unreadAlertsCount,
   } = usePocketPool();
+  const { toast } = useToast();
 
   // Draft / Staged preferences state
   const [draftSymbol, setDraftSymbol] = useState(settings.currencySymbol);
@@ -52,7 +55,6 @@ export const SettingsScreen: React.FC = () => {
   const [draftThreshold, setDraftThreshold] = useState(settings.thresholdAmount);
   const [draftGroupName, setDraftGroupName] = useState(settings.groupName);
   const [isSavingSettings, setIsSavingSettings] = useState(false);
-  const [saveSuccessToast, setSaveSuccessToast] = useState<string | null>(null);
 
   // Modals & Reset state
   const [pinModalVisible, setPinModalVisible] = useState(false);
@@ -61,7 +63,6 @@ export const SettingsScreen: React.FC = () => {
   const [jsonBackupText, setJsonBackupText] = useState('');
   const [resetModalMode, setResetModalMode] = useState<'demo' | 'zero' | null>(null);
   const [isResetting, setIsResetting] = useState(false);
-  const [resetToast, setResetToast] = useState<string | null>(null);
 
   // Sync draft state if settings are updated externally (e.g. after reset)
   useEffect(() => {
@@ -91,12 +92,12 @@ export const SettingsScreen: React.FC = () => {
         thresholdAmount: draftThreshold,
         groupName: draftGroupName.trim() || settings.groupName,
       });
-      setSaveSuccessToast(
-        `Settings saved! Currency updated to ${draftSymbol} (${draftCode}) and threshold set to ${draftSymbol}${draftThreshold}.`
+      toast.success(
+        'Settings Saved',
+        `Currency updated to ${draftSymbol} (${draftCode}) and threshold set to ${draftSymbol}${draftThreshold}.`
       );
-      setTimeout(() => setSaveSuccessToast(null), 4000);
     } catch (err: any) {
-      Alert.alert('Save Failed', err?.message || 'Could not save settings.');
+      toast.error('Save Failed', err?.message || 'Could not save settings.');
     } finally {
       setIsSavingSettings(false);
     }
@@ -107,13 +108,14 @@ export const SettingsScreen: React.FC = () => {
     setDraftCode(settings.currencyCode);
     setDraftThreshold(settings.thresholdAmount);
     setDraftGroupName(settings.groupName);
+    toast.info('Changes Discarded', 'Reverted draft settings to current saved values.');
   };
 
   const handleBiometricToggle = async (value: boolean) => {
     if (value) {
       const status = await BiometricsService.checkAvailability();
       if (!status.hasHardware) {
-        Alert.alert(
+        toast.warning(
           'Biometrics Not Detected',
           'Biometric hardware is not detected on this device. Fallback PIN will be used for locking PocketPool.'
         );
@@ -129,9 +131,9 @@ export const SettingsScreen: React.FC = () => {
       await updateSettings({ pinCode: newPin });
       setNewPin('');
       setPinModalVisible(false);
-      Alert.alert('PIN Updated', 'Your 4-digit security PIN has been saved.');
+      toast.success('PIN Updated', 'Your 4-digit security PIN has been saved.');
     } else {
-      Alert.alert('Invalid PIN', 'Please enter exactly 4 digits.');
+      toast.error('Invalid PIN', 'Please enter exactly 4 digits.');
     }
   };
 
@@ -146,12 +148,12 @@ export const SettingsScreen: React.FC = () => {
       const ok = await importJSONBackup(jsonBackupText);
       if (ok) {
         setJsonModalVisible(false);
-        Alert.alert('Success', 'Local JSON database restored successfully!');
+        toast.success('Success', 'Local JSON database restored successfully!');
       } else {
-        Alert.alert('Error', 'Invalid PocketPool JSON backup format.');
+        toast.error('Error', 'Invalid PocketPool JSON backup format.');
       }
     } catch {
-      Alert.alert('Error', 'Failed to parse JSON.');
+      toast.error('Error', 'Failed to parse JSON.');
     }
   };
 
@@ -161,15 +163,14 @@ export const SettingsScreen: React.FC = () => {
     try {
       if (resetModalMode === 'zero') {
         await resetToZero();
-        setResetToast('App reset to clean zero state! 0 members, 0 transactions.');
+        toast.warning('App Reset', 'App reset to clean zero state! 0 members, 0 transactions.');
       } else {
         await resetToDefaults();
-        setResetToast('Demo pool data and 4 members successfully restored!');
+        toast.success('App Reset', 'Demo pool data and 4 members successfully restored!');
       }
       setResetModalMode(null);
-      setTimeout(() => setResetToast(null), 4000);
     } catch (err: any) {
-      Alert.alert('Reset Failed', err?.message || 'Could not reset data.');
+      toast.error('Reset Failed', err?.message || 'Could not reset data.');
     } finally {
       setIsResetting(false);
     }
@@ -179,7 +180,9 @@ export const SettingsScreen: React.FC = () => {
     <View style={styles.container}>
       <ScrollView
         showsVerticalScrollIndicator={false}
-        contentContainerStyle={styles.scrollContent}
+        contentContainerStyle={[styles.scrollContent, { paddingBottom: 140 }]}
+        keyboardShouldPersistTaps="handled"
+        keyboardDismissMode="on-drag"
       >
         <Header
           title="App Settings"
@@ -189,22 +192,6 @@ export const SettingsScreen: React.FC = () => {
           unreadAlerts={unreadAlertsCount}
           onLockPress={settings.biometricEnabled ? lockApp : undefined}
         />
-
-        {/* Success Save Banner */}
-        {saveSuccessToast && (
-          <View style={styles.toastBanner}>
-            <CheckCircle size={18} color="#059669" />
-            <Text style={styles.toastText}>{saveSuccessToast}</Text>
-          </View>
-        )}
-
-        {/* Reset Feedback Banner */}
-        {resetToast && (
-          <View style={styles.toastBanner}>
-            <CheckCircle size={18} color="#059669" />
-            <Text style={styles.toastText}>{resetToast}</Text>
-          </View>
-        )}
 
         {/* Unsaved Changes Banner */}
         {hasUnsavedChanges && (
@@ -481,7 +468,10 @@ export const SettingsScreen: React.FC = () => {
         animationType="fade"
         onRequestClose={() => setPinModalVisible(false)}
       >
-        <View style={styles.modalOverlay}>
+        <KeyboardAvoidingView
+          behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+          style={styles.modalOverlay}
+        >
           <View style={styles.modalCard}>
             <Text style={styles.modalTitle}>Set 4-Digit Security PIN</Text>
             <Text style={styles.modalSubtitle}>
@@ -493,10 +483,11 @@ export const SettingsScreen: React.FC = () => {
               placeholder="1234"
               placeholderTextColor={theme.colors.textMuted}
               keyboardType="number-pad"
+              inputMode="numeric"
               maxLength={4}
               secureTextEntry
               value={newPin}
-              onChangeText={setNewPin}
+              onChangeText={(val) => setNewPin(val.replace(/[^0-9]/g, ''))}
               autoFocus
             />
 
@@ -516,7 +507,7 @@ export const SettingsScreen: React.FC = () => {
               </TouchableOpacity>
             </View>
           </View>
-        </View>
+        </KeyboardAvoidingView>
       </Modal>
 
       {/* Raw JSON Database Backup Modal */}

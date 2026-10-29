@@ -12,6 +12,7 @@ import {
 import * as Sharing from 'expo-sharing';
 import * as ImagePicker from 'expo-image-picker';
 import { usePocketPool } from '../context/PocketPoolContext';
+import { useToast } from '../context/ToastContext';
 import { Header } from '../components/common/Header';
 import { HeroMetric } from '../components/dashboard/HeroMetric';
 import { StatsRow } from '../components/dashboard/StatsRow';
@@ -76,6 +77,8 @@ export const DashboardScreen: React.FC<DashboardScreenProps> = ({
   const [alertsModalVisible, setAlertsModalVisible] = useState(false);
   const [exportModalVisible, setExportModalVisible] = useState(false);
 
+  const { toast } = useToast();
+
   // Active unread alert if budget is below threshold
   const activeAlert = alerts.length > 0 ? alerts[0] : null;
 
@@ -83,8 +86,12 @@ export const DashboardScreen: React.FC<DashboardScreenProps> = ({
     setIsExportingTx(true);
     try {
       await exportReport(format, 'single', tx.id);
+      toast.success(
+        'Invoice Ready',
+        `Generated ${format.toUpperCase()} invoice for this transaction.`
+      );
     } catch {
-      Alert.alert('Error', 'Failed to generate single transaction invoice');
+      toast.error('Export Error', 'Failed to generate single transaction invoice.');
     } finally {
       setIsExportingTx(false);
     }
@@ -98,10 +105,10 @@ export const DashboardScreen: React.FC<DashboardScreenProps> = ({
           dialogTitle: `Receipt - ${name || 'Expense'}`,
         });
       } else {
-        Alert.alert('Saved', 'Receipt picture is stored with your local expense data.');
+        toast.success('Saved', 'Receipt picture is stored with your local expense data.');
       }
     } catch (err: any) {
-      Alert.alert('Error', err?.message || 'Could not share receipt picture.');
+      toast.error('Share Error', err?.message || 'Could not share receipt picture.');
     }
   };
 
@@ -117,6 +124,7 @@ export const DashboardScreen: React.FC<DashboardScreenProps> = ({
           onPress: async () => {
             await deleteTransaction(id);
             setSelectedTx(null);
+            toast.info('Record Deleted', 'Transaction removed and budget recalculated.');
           },
         },
       ]

@@ -7,6 +7,8 @@ import {
   ScrollView,
   TextInput,
   Modal,
+  KeyboardAvoidingView,
+  Platform,
 } from 'react-native';
 import { Member } from '../../types';
 import { theme } from '../../theme';
@@ -111,7 +113,10 @@ export const MemberSelector: React.FC<MemberSelectorProps> = ({
         animationType="fade"
         onRequestClose={() => setModalVisible(false)}
       >
-        <View style={styles.modalOverlay}>
+        <KeyboardAvoidingView
+          behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+          style={styles.modalOverlay}
+        >
           <View style={styles.modalCard}>
             <View style={styles.modalHeader}>
               <View style={styles.modalTitleRow}>
@@ -152,7 +157,7 @@ export const MemberSelector: React.FC<MemberSelectorProps> = ({
               </TouchableOpacity>
             </View>
           </View>
-        </View>
+        </KeyboardAvoidingView>
       </Modal>
     </View>
   );

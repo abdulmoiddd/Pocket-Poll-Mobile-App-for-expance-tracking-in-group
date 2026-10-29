@@ -11,6 +11,7 @@ import {
 } from 'react-native';
 import * as ImagePicker from 'expo-image-picker';
 import { theme } from '../../theme';
+import { useToast } from '../../context/ToastContext';
 import { SAMPLE_RECEIPT_IMAGE_URI } from '../../services/receiptSamples';
 import {
   Camera,
@@ -35,15 +36,16 @@ export const ReceiptAttachmentArea: React.FC<ReceiptAttachmentAreaProps> = ({
   onAttachReceipt,
   onRemoveReceipt,
 }) => {
+  const { toast } = useToast();
   const [previewModalVisible, setPreviewModalVisible] = useState(false);
 
   const handlePickFromCamera = async () => {
     try {
       const permission = await ImagePicker.requestCameraPermissionsAsync();
       if (!permission.granted) {
-        Alert.alert(
-          'Camera Permission Required',
-          'Please allow camera access in your device settings to photograph receipts.'
+        toast.warning(
+          'Camera Access Required',
+          'Please allow camera permissions in device settings to photograph receipts.'
         );
         return;
       }
@@ -59,9 +61,10 @@ export const ReceiptAttachmentArea: React.FC<ReceiptAttachmentAreaProps> = ({
         const fileName =
           asset.fileName || `receipt_photo_${Date.now().toString().slice(-6)}.jpg`;
         onAttachReceipt(asset.uri, fileName);
+        toast.success('Receipt Photographed', 'Photo successfully attached to this expense.');
       }
     } catch (err: any) {
-      Alert.alert('Camera Error', err?.message || 'Could not launch camera.');
+      toast.error('Camera Error', err?.message || 'Could not launch camera.');
     }
   };
 
@@ -69,9 +72,9 @@ export const ReceiptAttachmentArea: React.FC<ReceiptAttachmentAreaProps> = ({
     try {
       const permission = await ImagePicker.requestMediaLibraryPermissionsAsync();
       if (!permission.granted) {
-        Alert.alert(
+        toast.warning(
           'Photo Library Access Required',
-          'Please allow photo library access in your settings to select receipt pictures.'
+          'Please allow photo library access in settings to select receipt pictures.'
         );
         return;
       }
@@ -87,9 +90,10 @@ export const ReceiptAttachmentArea: React.FC<ReceiptAttachmentAreaProps> = ({
         const fileName =
           asset.fileName || `receipt_img_${Date.now().toString().slice(-6)}.jpg`;
         onAttachReceipt(asset.uri, fileName);
+        toast.success('Receipt Selected', 'Photo successfully attached from gallery.');
       }
     } catch (err: any) {
-      Alert.alert('Gallery Error', err?.message || 'Could not select photo.');
+      toast.error('Gallery Error', err?.message || 'Could not select photo.');
     }
   };
 
@@ -98,6 +102,7 @@ export const ReceiptAttachmentArea: React.FC<ReceiptAttachmentAreaProps> = ({
       SAMPLE_RECEIPT_IMAGE_URI,
       `sample_receipt_${new Date().toISOString().slice(0, 10)}.png`
     );
+    toast.success('Sample Attached', 'Sample receipt attached to expense.');
   };
 
   return (

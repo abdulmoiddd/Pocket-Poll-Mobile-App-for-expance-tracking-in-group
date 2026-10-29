@@ -12,6 +12,7 @@ import {
   Platform,
 } from 'react-native';
 import { usePocketPool } from '../context/PocketPoolContext';
+import { useToast } from '../context/ToastContext';
 import { Header } from '../components/common/Header';
 import { Button } from '../components/common/Button';
 import { theme } from '../theme';
@@ -58,6 +59,7 @@ export const MembersScreen: React.FC<MembersScreenProps> = ({ onQuickDepositForM
     unreadAlertsCount,
     lockApp,
   } = usePocketPool();
+  const { toast } = useToast();
 
   const [addModalVisible, setAddModalVisible] = useState(false);
   const [name, setName] = useState('');
@@ -95,7 +97,7 @@ export const MembersScreen: React.FC<MembersScreenProps> = ({ onQuickDepositForM
 
   const handleCreateMember = async () => {
     if (!name.trim()) {
-      Alert.alert('Name Required', 'Please enter a name for the new member.');
+      toast.error('Name Required', 'Please enter a name for the new member.');
       return;
     }
 
@@ -117,12 +119,12 @@ export const MembersScreen: React.FC<MembersScreenProps> = ({ onQuickDepositForM
       setPhone('');
       setInitialDeposit('');
 
-      Alert.alert(
+      toast.success(
         'Member Added',
         `${name.trim()} has been added to ${settings.groupName}!`
       );
     } catch (err: any) {
-      Alert.alert('Error', err?.message || 'Failed to add member.');
+      toast.error('Error', err?.message || 'Failed to add member.');
     } finally {
       setIsSubmitting(false);
     }
@@ -130,8 +132,10 @@ export const MembersScreen: React.FC<MembersScreenProps> = ({ onQuickDepositForM
 
   const handleConfirmDelete = async () => {
     if (deleteMemberTarget) {
+      const removedName = deleteMemberTarget.name;
       await deleteMember(deleteMemberTarget.id);
       setDeleteMemberTarget(null);
+      toast.info('Member Removed', `${removedName} was removed from the pool.`);
     }
   };
 
@@ -139,6 +143,7 @@ export const MembersScreen: React.FC<MembersScreenProps> = ({ onQuickDepositForM
     if (groupNameInput.trim()) {
       await updateSettings({ groupName: groupNameInput.trim() });
       setIsEditingGroupName(false);
+      toast.success('Group Name Saved', `Renamed pool group to "${groupNameInput.trim()}".`);
     }
   };
 
@@ -147,6 +152,8 @@ export const MembersScreen: React.FC<MembersScreenProps> = ({ onQuickDepositForM
       <ScrollView
         showsVerticalScrollIndicator={false}
         contentContainerStyle={styles.scrollContent}
+        keyboardShouldPersistTaps="handled"
+        keyboardDismissMode="on-drag"
       >
         <Header
           title="Group Members"
@@ -337,7 +344,7 @@ export const MembersScreen: React.FC<MembersScreenProps> = ({ onQuickDepositForM
         onRequestClose={() => setAddModalVisible(false)}
       >
         <KeyboardAvoidingView
-          behavior={Platform.OS === 'ios' ? 'padding' : undefined}
+          behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
           style={styles.modalOverlay}
         >
           <View style={styles.modalSheet}>
@@ -359,7 +366,12 @@ export const MembersScreen: React.FC<MembersScreenProps> = ({ onQuickDepositForM
               </TouchableOpacity>
             </View>
 
-            <ScrollView showsVerticalScrollIndicator={false} style={{ maxHeight: 420 }}>
+            <ScrollView
+              showsVerticalScrollIndicator={false}
+              keyboardShouldPersistTaps="handled"
+              contentContainerStyle={{ paddingBottom: 24 }}
+              style={{ maxHeight: 460 }}
+            >
               {/* Full Name */}
               <Text style={styles.inputLabel}>FULL NAME *</Text>
               <TextInput
@@ -378,6 +390,7 @@ export const MembersScreen: React.FC<MembersScreenProps> = ({ onQuickDepositForM
                 placeholder="jordan@example.com"
                 placeholderTextColor={theme.colors.textMuted}
                 keyboardType="email-address"
+                inputMode="email"
                 autoCapitalize="none"
                 value={email}
                 onChangeText={setEmail}
@@ -390,6 +403,7 @@ export const MembersScreen: React.FC<MembersScreenProps> = ({ onQuickDepositForM
                 placeholder="+1 (555) 019-2834"
                 placeholderTextColor={theme.colors.textMuted}
                 keyboardType="phone-pad"
+                inputMode="tel"
                 value={phone}
                 onChangeText={setPhone}
               />
@@ -428,6 +442,7 @@ export const MembersScreen: React.FC<MembersScreenProps> = ({ onQuickDepositForM
                   placeholder="0.00"
                   placeholderTextColor={theme.colors.textMuted}
                   keyboardType="decimal-pad"
+                  inputMode="decimal"
                   value={initialDeposit}
                   onChangeText={setInitialDeposit}
                 />
@@ -503,7 +518,10 @@ export const MembersScreen: React.FC<MembersScreenProps> = ({ onQuickDepositForM
         animationType="fade"
         onRequestClose={() => setIsEditingGroupName(false)}
       >
-        <View style={styles.modalOverlay}>
+        <KeyboardAvoidingView
+          behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+          style={styles.modalOverlay}
+        >
           <View style={styles.confirmModalCard}>
             <Text style={styles.confirmTitle}>Edit Group Name</Text>
             <Text style={styles.confirmSubtitle}>
@@ -534,7 +552,7 @@ export const MembersScreen: React.FC<MembersScreenProps> = ({ onQuickDepositForM
               </TouchableOpacity>
             </View>
           </View>
-        </View>
+        </KeyboardAvoidingView>
       </Modal>
     </View>
   );

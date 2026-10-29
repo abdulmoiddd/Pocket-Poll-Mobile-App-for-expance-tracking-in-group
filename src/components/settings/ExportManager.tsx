@@ -8,6 +8,7 @@ import {
   Alert,
 } from 'react-native';
 import { theme } from '../../theme';
+import { useToast } from '../../context/ToastContext';
 import { ExportFormat, ExportTimeframe } from '../../types';
 import { FileText, FileSpreadsheet, Download, CheckCircle } from 'lucide-react-native';
 
@@ -16,6 +17,7 @@ interface ExportManagerProps {
 }
 
 export const ExportManager: React.FC<ExportManagerProps> = ({ onExport }) => {
+  const { toast } = useToast();
   const [selectedFormat, setSelectedFormat] = useState<ExportFormat>('pdf');
   const [selectedTimeframe, setSelectedTimeframe] = useState<ExportTimeframe>('last_week');
   const [isExporting, setIsExporting] = useState(false);
@@ -33,15 +35,14 @@ export const ExportManager: React.FC<ExportManagerProps> = ({ onExport }) => {
     try {
       const res = await onExport(selectedFormat, selectedTimeframe);
       setLastExported(new Date().toLocaleTimeString());
-      Alert.alert(
-        'Export Generated Successfully',
-        `Your ${selectedFormat.toUpperCase()} invoice for "${
+      toast.success(
+        'Export Generated',
+        `Your ${selectedFormat.toUpperCase()} report for "${
           selectedTimeframe.replace('_', ' ')
-        }" is ready.`,
-        [{ text: 'OK' }]
+        }" is ready.`
       );
     } catch (err: any) {
-      Alert.alert('Export Error', err?.message || 'Unable to generate export.');
+      toast.error('Export Error', err?.message || 'Unable to generate export.');
     } finally {
       setIsExporting(false);
     }

@@ -1,8 +1,7 @@
-import React from 'react';
+import React, { useState, useEffect } from 'react';
 import { View, Text, StyleSheet, TouchableOpacity, TextInput } from 'react-native';
 import { theme } from '../../theme';
-import { formatCurrency } from '../../services/calculations';
-import { AlertTriangle, Plus, Minus } from 'lucide-react-native';
+import { AlertTriangle, Plus, Minus, Edit3 } from 'lucide-react-native';
 
 interface ThresholdSliderProps {
   thresholdAmount: number;
@@ -17,9 +16,36 @@ export const ThresholdSlider: React.FC<ThresholdSliderProps> = ({
   currencySymbol,
   onUpdateThreshold,
 }) => {
+  const [inputText, setInputText] = useState(thresholdAmount.toString());
+
+  // Keep input text in sync when thresholdAmount updates via presets or +/- buttons
+  useEffect(() => {
+    setInputText(thresholdAmount.toString());
+  }, [thresholdAmount]);
+
   const handleIncrement = (amount: number) => {
     const next = Math.max(10, thresholdAmount + amount);
     onUpdateThreshold(next);
+  };
+
+  const handleTextChange = (text: string) => {
+    // Only allow numbers and one decimal dot
+    const clean = text.replace(/[^0-9.]/g, '');
+    setInputText(clean);
+    const numeric = parseFloat(clean);
+    if (!isNaN(numeric) && numeric >= 0) {
+      onUpdateThreshold(numeric);
+    }
+  };
+
+  const handleBlur = () => {
+    const numeric = parseFloat(inputText);
+    if (isNaN(numeric) || numeric <= 0) {
+      setInputText('50');
+      onUpdateThreshold(50);
+    } else {
+      setInputText(numeric.toString());
+    }
   };
 
   return (
@@ -30,7 +56,7 @@ export const ThresholdSlider: React.FC<ThresholdSliderProps> = ({
           <Text style={styles.title}>Budget Alert Threshold</Text>
         </View>
         <Text style={styles.subtitle}>
-          Trigger an in-app alert when remaining pool balance drops below this amount.
+          Trigger an interactive toaster alert when remaining pool balance drops below this amount.
         </Text>
       </View>
 
@@ -44,11 +70,24 @@ export const ThresholdSlider: React.FC<ThresholdSliderProps> = ({
           <Minus size={18} color={theme.colors.textPrimary} />
         </TouchableOpacity>
 
+        {/* Digital Numeric Keypad Input for Custom Threshold */}
         <View style={styles.amountDisplay}>
-          <Text style={styles.amountText}>
-            {formatCurrency(thresholdAmount, currencySymbol)}
-          </Text>
-          <Text style={styles.alertTriggerText}>Active Alert Trigger</Text>
+          <View style={styles.amountInputRow}>
+            <Text style={styles.currencyPrefix}>{currencySymbol}</Text>
+            <TextInput
+              style={styles.amountInput}
+              value={inputText}
+              onChangeText={handleTextChange}
+              onBlur={handleBlur}
+              keyboardType="decimal-pad"
+              inputMode="decimal"
+              selectTextOnFocus
+              accessibilityRole="text"
+              accessibilityLabel="Custom threshold amount input"
+            />
+            <Edit3 size={14} color={theme.colors.textMuted} style={styles.editIcon} />
+          </View>
+          <Text style={styles.alertTriggerText}>Tap amount to type on digital keypad</Text>
         </View>
 
         <TouchableOpacity
@@ -109,6 +148,7 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     gap: 8,
+    marginBottom: 4,
   },
   title: {
     fontSize: 16,
@@ -117,8 +157,7 @@ const styles = StyleSheet.create({
   },
   subtitle: {
     fontSize: 12,
-    color: theme.colors.textMuted,
-    marginTop: 4,
+    color: theme.colors.textSecondary,
     lineHeight: 16,
   },
   controlRow: {
@@ -127,9 +166,8 @@ const styles = StyleSheet.create({
     justifyContent: 'space-between',
     backgroundColor: '#F8FAFC',
     borderRadius: theme.borderRadius.md,
-    padding: 12,
-    borderWidth: 1,
-    borderColor: theme.colors.border,
+    padding: 10,
+    marginBottom: 14,
   },
   stepBtn: {
     width: 44,
@@ -138,50 +176,64 @@ const styles = StyleSheet.create({
     backgroundColor: '#FFFFFF',
     alignItems: 'center',
     justifyContent: 'center',
-    borderWidth: 1,
-    borderColor: theme.colors.border,
     ...theme.shadows.sm,
   },
   amountDisplay: {
     alignItems: 'center',
+    flex: 1,
   },
-  amountText: {
+  amountInputRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  currencyPrefix: {
+    fontSize: 22,
+    fontWeight: '800',
+    color: theme.colors.textPrimary,
+    marginRight: 2,
+  },
+  amountInput: {
     fontSize: 26,
     fontWeight: '800',
     color: theme.colors.textPrimary,
-    letterSpacing: -0.5,
+    minWidth: 60,
+    textAlign: 'center',
+    paddingVertical: 2,
+    paddingHorizontal: 4,
+  },
+  editIcon: {
+    marginLeft: 4,
+    opacity: 0.6,
   },
   alertTriggerText: {
     fontSize: 11,
-    color: theme.colors.warning,
-    fontWeight: '700',
+    color: theme.colors.textMuted,
+    fontWeight: '500',
     marginTop: 2,
-    textTransform: 'uppercase',
   },
   presetsRow: {
     flexDirection: 'row',
     justifyContent: 'space-between',
-    marginTop: 14,
     gap: 6,
   },
   presetPill: {
     flex: 1,
     paddingVertical: 8,
-    alignItems: 'center',
-    borderRadius: theme.borderRadius.sm,
+    borderRadius: 20,
     backgroundColor: '#F1F5F9',
+    alignItems: 'center',
+    justifyContent: 'center',
   },
   selectedPresetPill: {
-    backgroundColor: theme.colors.primaryLight,
-    borderWidth: 1.5,
-    borderColor: theme.colors.primary,
+    backgroundColor: theme.colors.primary,
   },
   presetText: {
-    fontSize: 12,
+    fontSize: 13,
     fontWeight: '700',
     color: theme.colors.textSecondary,
   },
   selectedPresetText: {
-    color: theme.colors.primary,
+    color: '#FFFFFF',
   },
 });
