@@ -42,6 +42,8 @@ import {
   Sliders,
   Shield,
   FileSpreadsheet,
+  ChevronDown,
+  Layers,
 } from 'lucide-react-native';
 
 export const SettingsScreen: React.FC = () => {
@@ -79,6 +81,9 @@ export const SettingsScreen: React.FC = () => {
   const [jsonBackupText, setJsonBackupText] = useState('');
   const [resetModalMode, setResetModalMode] = useState<'demo' | 'zero' | null>(null);
   const [isResetting, setIsResetting] = useState(false);
+  const [isPoolDropdownOpen, setIsPoolDropdownOpen] = useState(false);
+
+  const currentPool = pools.find((p) => p.id === activePoolId) || pools[0];
 
   // Cloud Sync Actions state
   const [isUploadingToCloud, setIsUploadingToCloud] = useState(false);
@@ -255,27 +260,6 @@ export const SettingsScreen: React.FC = () => {
           onLockPress={settings.biometricEnabled ? lockApp : undefined}
         />
 
-        {/* Unsaved Changes Banner */}
-        {hasUnsavedChanges && (
-          <View style={styles.unsavedBanner}>
-            <View style={styles.unsavedBannerLeft}>
-              <AlertTriangle size={18} color="#D97706" />
-              <Text style={styles.unsavedBannerText}>
-                You have unsaved changes. Tap "Save Settings" below to apply.
-              </Text>
-            </View>
-            <TouchableOpacity
-              style={styles.quickSaveBtn}
-              onPress={handleSaveSettings}
-              disabled={isSavingSettings}
-              accessibilityRole="button"
-              accessibilityLabel="Quick save settings button"
-            >
-              <Text style={styles.quickSaveBtnText}>Save Now</Text>
-            </TouchableOpacity>
-          </View>
-        )}
-
         {/* ======================================================== */}
         {/* SECTION 1: CLOUD SYNCHRONIZATION & BACKUP */}
         {/* ======================================================== */}
@@ -423,13 +407,13 @@ export const SettingsScreen: React.FC = () => {
           </Text>
         </View>
 
-        {/* Active Budget Pool Selection */}
+        {/* Active Budget Pool Selection - Dropdown Menu */}
         <View style={styles.card}>
           <View style={styles.cardHeaderRow}>
             <View>
               <Text style={styles.cardTitle}>Active Budget Pool</Text>
               <Text style={styles.cardSubtitle}>
-                Switch between different trips, vacations, and events
+                Select the pool for your active trip or event
               </Text>
             </View>
             <View style={styles.poolCountBadge}>
@@ -437,30 +421,76 @@ export const SettingsScreen: React.FC = () => {
             </View>
           </View>
 
-          <View style={styles.poolButtonsGrid}>
-            {pools.map((p) => {
-              const isSelected = p.id === activePoolId;
-              return (
-                <TouchableOpacity
-                  key={p.id}
-                  style={[styles.settingsPoolPill, isSelected && styles.settingsPoolPillActive]}
-                  onPress={() => switchPool(p.id)}
-                  accessibilityRole="button"
-                  accessibilityLabel={`Switch to ${p.name}`}
-                >
-                  <Text
-                    style={[
-                      styles.settingsPoolPillText,
-                      isSelected && styles.settingsPoolPillTextActive,
-                    ]}
+          {/* Dropdown Selector Button */}
+          <TouchableOpacity
+            style={[styles.dropdownButton, isPoolDropdownOpen && styles.dropdownButtonActive]}
+            onPress={() => setIsPoolDropdownOpen(!isPoolDropdownOpen)}
+            accessibilityRole="combobox"
+            accessibilityLabel={`Current budget pool: ${currentPool?.name}. Tap to change.`}
+            accessibilityState={{ expanded: isPoolDropdownOpen }}
+          >
+            <View style={styles.dropdownButtonLeft}>
+              <View style={styles.dropdownPoolIconBox}>
+                <Layers size={18} color="#5A48D6" />
+              </View>
+              <View style={{ flex: 1 }}>
+                <Text style={styles.dropdownButtonTitle} numberOfLines={1}>
+                  {currentPool?.name || 'Select Pool'}
+                </Text>
+                <Text style={styles.dropdownButtonSubtitle}>
+                  Tap to switch active budget pool
+                </Text>
+              </View>
+            </View>
+            <ChevronDown
+              size={18}
+              color={theme.colors.textPrimary}
+              style={{ transform: [{ rotate: isPoolDropdownOpen ? '180deg' : '0deg' }] }}
+            />
+          </TouchableOpacity>
+
+          {/* Dropdown Options List */}
+          {isPoolDropdownOpen && (
+            <View style={styles.dropdownList}>
+              {pools.map((p) => {
+                const isSelected = p.id === activePoolId;
+                return (
+                  <TouchableOpacity
+                    key={p.id}
+                    style={[styles.dropdownItem, isSelected && styles.dropdownItemActive]}
+                    onPress={() => {
+                      switchPool(p.id);
+                      setIsPoolDropdownOpen(false);
+                      toast.info('Switched Budget', `Now viewing "${p.name}".`);
+                    }}
+                    accessibilityRole="button"
+                    accessibilityLabel={`Switch to ${p.name}`}
                   >
-                    {p.name}
-                  </Text>
-                  {isSelected && <Check size={14} color="#5A48D6" strokeWidth={2.5} />}
-                </TouchableOpacity>
-              );
-            })}
-          </View>
+                    <View style={styles.dropdownItemLeft}>
+                      <View style={[styles.dropdownItemBullet, isSelected && styles.dropdownItemBulletActive]} />
+                      <View style={{ flex: 1 }}>
+                        <Text
+                          style={[
+                            styles.dropdownItemText,
+                            isSelected && styles.dropdownItemTextActive,
+                          ]}
+                          numberOfLines={1}
+                        >
+                          {p.name}
+                        </Text>
+                        {p.description ? (
+                          <Text style={styles.dropdownItemDesc} numberOfLines={1}>
+                            {p.description}
+                          </Text>
+                        ) : null}
+                      </View>
+                    </View>
+                    {isSelected && <Check size={16} color="#5A48D6" strokeWidth={2.5} />}
+                  </TouchableOpacity>
+                );
+              })}
+            </View>
+          )}
         </View>
 
         {/* Group / Pool Name Card */}
@@ -495,66 +525,6 @@ export const SettingsScreen: React.FC = () => {
           currencySymbol={draftSymbol}
           onUpdateThreshold={(amount) => setDraftThreshold(amount)}
         />
-
-        {/* Prominent Save Configuration Card */}
-        <View style={[styles.card, hasUnsavedChanges && styles.saveCardActive]}>
-          <View style={styles.saveHeaderRow}>
-            <View style={{ flex: 1, marginRight: 10 }}>
-              <Text style={styles.cardTitle}>Save Configuration</Text>
-              <Text style={styles.cardSubtitle}>
-                {hasUnsavedChanges
-                  ? `Pending changes: ${
-                      draftSymbol !== settings.currencySymbol
-                        ? `Currency (${draftSymbol}) `
-                        : ''
-                    }${
-                      draftThreshold !== settings.thresholdAmount
-                        ? `Threshold (${draftSymbol}${draftThreshold}) `
-                        : ''
-                    }${
-                      draftGroupName.trim() !== settings.groupName
-                        ? `Group Name ("${draftGroupName.trim()}")`
-                        : ''
-                    }`
-                  : 'All preferences are saved and active throughout the application.'}
-              </Text>
-            </View>
-            {hasUnsavedChanges && (
-              <View style={styles.unsavedBadge}>
-                <Text style={styles.unsavedBadgeText}>Unsaved</Text>
-              </View>
-            )}
-          </View>
-
-          <View style={styles.saveButtonsRow}>
-            <TouchableOpacity
-              style={[
-                styles.primarySaveBtn,
-                !hasUnsavedChanges && styles.primarySaveBtnDisabled,
-              ]}
-              onPress={handleSaveSettings}
-              disabled={!hasUnsavedChanges || isSavingSettings}
-              accessibilityRole="button"
-              accessibilityLabel="Save settings changes"
-            >
-              <Save size={18} color="#FFFFFF" />
-              <Text style={styles.primarySaveBtnText}>
-                {isSavingSettings ? 'Saving Settings...' : 'Save Settings'}
-              </Text>
-            </TouchableOpacity>
-
-            {hasUnsavedChanges && (
-              <TouchableOpacity
-                style={styles.discardBtn}
-                onPress={handleDiscardChanges}
-                accessibilityRole="button"
-                accessibilityLabel="Discard unsaved changes"
-              >
-                <Text style={styles.discardBtnText}>Discard</Text>
-              </TouchableOpacity>
-            )}
-          </View>
-        </View>
 
         {/* ======================================================== */}
         {/* SECTION 3: INVOICING & DATA EXPORT */}
@@ -760,6 +730,49 @@ export const SettingsScreen: React.FC = () => {
           <Text style={styles.infoSubtext}>Designed according to Requirements V2 specifications</Text>
         </View>
       </ScrollView>
+
+      {/* Floating Action Toaster for Unsaved Settings (Replaces static Save section) */}
+      {hasUnsavedChanges && (
+        <View style={styles.floatingToaster}>
+          <View style={styles.floatingToasterContent}>
+            <View style={styles.floatingToasterIcon}>
+              <AlertTriangle size={18} color="#D97706" />
+            </View>
+            <View style={styles.floatingToasterTextWrap}>
+              <Text style={styles.floatingToasterTitle}>Unsaved Settings</Text>
+              <Text style={styles.floatingToasterSubtitle} numberOfLines={1}>
+                {draftSymbol !== settings.currencySymbol ? `Currency: ${draftSymbol} ` : ''}
+                {draftThreshold !== settings.thresholdAmount ? `Threshold: ${draftSymbol}${draftThreshold} ` : ''}
+                {draftGroupName.trim() !== settings.groupName ? `Name: "${draftGroupName.trim()}"` : ''}
+              </Text>
+            </View>
+          </View>
+
+          <View style={styles.floatingToasterActions}>
+            <TouchableOpacity
+              style={styles.floatingCancelBtn}
+              onPress={handleDiscardChanges}
+              accessibilityRole="button"
+              accessibilityLabel="Cancel unsaved changes"
+            >
+              <Text style={styles.floatingCancelText}>Cancel</Text>
+            </TouchableOpacity>
+
+            <TouchableOpacity
+              style={styles.floatingSaveBtn}
+              onPress={handleSaveSettings}
+              disabled={isSavingSettings}
+              accessibilityRole="button"
+              accessibilityLabel="Save settings"
+            >
+              <Save size={14} color="#FFFFFF" />
+              <Text style={styles.floatingSaveText}>
+                {isSavingSettings ? 'Saving...' : 'Save'}
+              </Text>
+            </TouchableOpacity>
+          </View>
+        </View>
+      )}
 
       {/* Change PIN Modal */}
       <Modal
@@ -1438,5 +1451,179 @@ const styles = StyleSheet.create({
     borderBottomWidth: 1,
     borderBottomColor: '#F1F5F9',
     gap: 12,
+  },
+  dropdownButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    backgroundColor: '#F8FAFC',
+    borderWidth: 1.5,
+    borderColor: '#E2E8F0',
+    borderRadius: 14,
+    paddingVertical: 12,
+    paddingHorizontal: 14,
+    marginTop: 8,
+  },
+  dropdownButtonActive: {
+    borderColor: '#5A48D6',
+    backgroundColor: '#F5F3FF',
+  },
+  dropdownButtonLeft: {
+    flex: 1,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 12,
+    marginRight: 8,
+  },
+  dropdownPoolIconBox: {
+    width: 36,
+    height: 36,
+    borderRadius: 10,
+    backgroundColor: '#EDE9FE',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  dropdownButtonTitle: {
+    fontSize: 14,
+    fontWeight: '700',
+    color: theme.colors.textPrimary,
+  },
+  dropdownButtonSubtitle: {
+    fontSize: 11,
+    color: theme.colors.textMuted,
+    marginTop: 1,
+  },
+  dropdownList: {
+    backgroundColor: '#FFFFFF',
+    borderWidth: 1.5,
+    borderColor: '#E2E8F0',
+    borderRadius: 14,
+    marginTop: 8,
+    overflow: 'hidden',
+    ...theme.shadows.sm,
+  },
+  dropdownItem: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingVertical: 12,
+    paddingHorizontal: 14,
+    borderBottomWidth: 1,
+    borderBottomColor: '#F1F5F9',
+  },
+  dropdownItemActive: {
+    backgroundColor: '#F5F3FF',
+  },
+  dropdownItemLeft: {
+    flex: 1,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 10,
+    marginRight: 10,
+  },
+  dropdownItemBullet: {
+    width: 8,
+    height: 8,
+    borderRadius: 4,
+    backgroundColor: '#CBD5E1',
+  },
+  dropdownItemBulletActive: {
+    backgroundColor: '#5A48D6',
+    width: 10,
+    height: 10,
+    borderRadius: 5,
+  },
+  dropdownItemText: {
+    fontSize: 14,
+    fontWeight: '600',
+    color: theme.colors.textPrimary,
+  },
+  dropdownItemTextActive: {
+    fontWeight: '800',
+    color: '#5A48D6',
+  },
+  dropdownItemDesc: {
+    fontSize: 11,
+    color: theme.colors.textMuted,
+    marginTop: 2,
+  },
+  floatingToaster: {
+    position: 'absolute',
+    bottom: 24,
+    left: 16,
+    right: 16,
+    backgroundColor: '#FFFFFF',
+    borderRadius: 18,
+    paddingVertical: 12,
+    paddingHorizontal: 16,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    borderWidth: 1.5,
+    borderColor: '#FDE68A',
+    shadowColor: '#000000',
+    shadowOffset: { width: 0, height: 6 },
+    shadowOpacity: 0.16,
+    shadowRadius: 14,
+    elevation: 10,
+    zIndex: 9999,
+  },
+  floatingToasterContent: {
+    flex: 1,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 10,
+    marginRight: 10,
+  },
+  floatingToasterIcon: {
+    width: 32,
+    height: 32,
+    borderRadius: 10,
+    backgroundColor: '#FEF3C7',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  floatingToasterTextWrap: {
+    flex: 1,
+  },
+  floatingToasterTitle: {
+    fontSize: 13,
+    fontWeight: '800',
+    color: '#92400E',
+  },
+  floatingToasterSubtitle: {
+    fontSize: 11,
+    color: theme.colors.textMuted,
+    marginTop: 1,
+  },
+  floatingToasterActions: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+  },
+  floatingCancelBtn: {
+    paddingVertical: 8,
+    paddingHorizontal: 12,
+    borderRadius: 10,
+    backgroundColor: '#F1F5F9',
+  },
+  floatingCancelText: {
+    fontSize: 12,
+    fontWeight: '700',
+    color: theme.colors.textSecondary,
+  },
+  floatingSaveBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    paddingVertical: 8,
+    paddingHorizontal: 14,
+    borderRadius: 10,
+    backgroundColor: theme.colors.primary,
+  },
+  floatingSaveText: {
+    fontSize: 12,
+    fontWeight: '800',
+    color: '#FFFFFF',
   },
 });

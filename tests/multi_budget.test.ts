@@ -258,6 +258,33 @@ export function runMultiBudgetTests(): boolean {
     'Summer Trip remaining balance ($500) completely unchanged after new pool transaction'
   );
 
+  // Test 6: Offline Expense Deduction Verification on Active Pool
+  const offlineExpense: Transaction = {
+    id: 'tx_s_offline_e3',
+    poolId: 'pool_summer_trip',
+    type: 'expense',
+    amount: 100,
+    memberId: 'm1',
+    memberName: 'Alice',
+    category: 'Shopping',
+    date: '2026-10-29',
+    paymentMethod: 'Cash',
+    createdAt: Date.now(),
+  };
+
+  const offlineUpdatedSummerTxs = [...postAddSummer, offlineExpense];
+  const deductedBudget = calculateBudgetSummary(offlineUpdatedSummerTxs, 200, dummyMembers);
+  assert(deductedBudget.totalBudget === 1200, 'Total budget remains $1200 after offline expense');
+  passed++;
+  total++;
+  assert(deductedBudget.totalExpenses === 800, 'Total expenses correctly increments to $800 (700 + 100)');
+  passed++;
+  total++;
+  assert(deductedBudget.remainingBudget === 400, 'Remaining pool balance correctly deducted: 500 - 100 = $400');
+  passed++;
+  total++;
+  console.log('  ✅ PASS: Offline expense correctly deducts amount from main pool balance (500 -> 400)');
+
   console.log(`✨ Multi-Budget Pools Suite Passed: ${passed}/${total} assertions.\n`);
   return true;
 }
