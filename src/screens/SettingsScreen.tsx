@@ -11,6 +11,7 @@ import {
   Modal,
   Platform,
   KeyboardAvoidingView,
+  ActivityIndicator,
 } from 'react-native';
 import { usePocketPool } from '../context/PocketPoolContext';
 import { Header } from '../components/common/Header';
@@ -36,6 +37,11 @@ import {
   Users,
   Cloud,
   CloudOff,
+  CloudUpload,
+  CloudDownload,
+  Sliders,
+  Shield,
+  FileSpreadsheet,
 } from 'lucide-react-native';
 
 export const SettingsScreen: React.FC = () => {
@@ -52,6 +58,8 @@ export const SettingsScreen: React.FC = () => {
     resetToZero,
     exportJSONBackup,
     importJSONBackup,
+    uploadLocalDataToCloud,
+    downloadCloudDataToLocal,
     lockApp,
     unreadAlertsCount,
   } = usePocketPool();
@@ -71,6 +79,52 @@ export const SettingsScreen: React.FC = () => {
   const [jsonBackupText, setJsonBackupText] = useState('');
   const [resetModalMode, setResetModalMode] = useState<'demo' | 'zero' | null>(null);
   const [isResetting, setIsResetting] = useState(false);
+
+  // Cloud Sync Actions state
+  const [isUploadingToCloud, setIsUploadingToCloud] = useState(false);
+  const [isDownloadingFromCloud, setIsDownloadingFromCloud] = useState(false);
+
+  const handleUploadMobileData = async () => {
+    setIsUploadingToCloud(true);
+    try {
+      const stats = await uploadLocalDataToCloud();
+      toast.success(
+        'Upload Complete',
+        `Successfully synced ${stats.poolsCount} budget pools, ${stats.txCount} transactions, and ${stats.membersCount} members to Firebase.`
+      );
+    } catch (err: any) {
+      toast.error('Upload Failed', err?.message || 'Failed to upload mobile data to Firebase.');
+    } finally {
+      setIsUploadingToCloud(false);
+    }
+  };
+
+  const handleDownloadCloudData = async () => {
+    Alert.alert(
+      'Download Firebase Data',
+      'This will fetch your latest pools, transactions, and members from Firebase and update your local mobile app storage. Continue?',
+      [
+        { text: 'Cancel', style: 'cancel' },
+        {
+          text: 'Download',
+          onPress: async () => {
+            setIsDownloadingFromCloud(true);
+            try {
+              const stats = await downloadCloudDataToLocal();
+              toast.success(
+                'Download Complete',
+                `Successfully restored ${stats.poolsCount} budget pools, ${stats.txCount} transactions, and ${stats.membersCount} members from Firebase.`
+              );
+            } catch (err: any) {
+              toast.error('Download Failed', err?.message || 'Failed to download data from Firebase.');
+            } finally {
+              setIsDownloadingFromCloud(false);
+            }
+          },
+        },
+      ]
+    );
+  };
 
   // Sync draft state if settings are updated externally (e.g. after reset)
   useEffect(() => {
@@ -222,6 +276,153 @@ export const SettingsScreen: React.FC = () => {
           </View>
         )}
 
+        {/* ======================================================== */}
+        {/* SECTION 1: CLOUD SYNCHRONIZATION & BACKUP */}
+        {/* ======================================================== */}
+        <View style={styles.sectionHeaderWrap}>
+          <View style={styles.sectionHeaderRow}>
+            <View style={styles.sectionHeaderIconBadge}>
+              <Cloud size={14} color={theme.colors.primary} />
+            </View>
+            <Text style={styles.sectionHeaderTitle}>Cloud &amp; Multi-Device Sync</Text>
+          </View>
+          <Text style={styles.sectionHeaderSubtitle}>
+            Firebase real-time sync, offline queue &amp; migration (Free Tier)
+          </Text>
+        </View>
+
+        {/* Firebase Cloud Sync Card */}
+        <View style={styles.card}>
+          <View style={styles.cardHeaderRow}>
+            <View style={{ flex: 1, marginRight: 8 }}>
+              <Text style={styles.cardTitle}>Cloud Synchronization</Text>
+              <Text style={styles.cardSubtitle}>
+                {isCloudSyncActive
+                  ? 'All changes automatically sync to Firebase Realtime Database.'
+                  : 'Operating in offline cache. Writes queue and sync upon reconnection.'}
+              </Text>
+            </View>
+            <View
+              style={[
+                styles.syncStatusBadge,
+                isCloudSyncActive ? styles.syncBadgeOnline : styles.syncBadgeOffline,
+              ]}
+            >
+              <Text
+                style={[
+                  styles.syncStatusText,
+                  isCloudSyncActive ? styles.syncTextOnline : styles.syncTextOffline,
+                ]}
+              >
+                {isCloudSyncActive ? 'ONLINE' : 'OFFLINE'}
+              </Text>
+            </View>
+          </View>
+
+          {/* Toggle Bar */}
+          <View style={styles.syncRow}>
+            <View style={styles.syncRowLeft}>
+              {isCloudSyncActive ? (
+                <Cloud size={20} color="#059669" />
+              ) : (
+                <CloudOff size={20} color="#D97706" />
+              )}
+              <View style={styles.syncTextGroup}>
+                <Text style={styles.syncLabel}>
+                  {isCloudSyncActive ? 'Sync With Firebase' : 'Sync Paused (Offline)'}
+                </Text>
+                <Text style={styles.syncDesc} numberOfLines={2}>
+                  {isCloudSyncActive
+                    ? 'Connected to Firebase. Auto-sync is active.'
+                    : 'Toggle on to resume cloud synchronization.'}
+                </Text>
+              </View>
+            </View>
+            <Switch
+              value={isCloudSyncActive}
+              onValueChange={toggleCloudSync}
+              trackColor={{ false: '#CBD5E1', true: '#A7F3D0' }}
+              thumbColor={isCloudSyncActive ? '#059669' : '#94A3B8'}
+              accessibilityLabel="Toggle Firebase Cloud Synchronization"
+            />
+          </View>
+
+          {/* Divider */}
+          <View style={styles.cardDivider} />
+
+          {/* Manual Data Migration Options */}
+          <Text style={styles.cardSectionLabel}>CLOUD DATA MIGRATION</Text>
+
+          {/* Option: Upload Mobile Data to Firebase */}
+          <TouchableOpacity
+            style={styles.syncActionRow}
+            onPress={handleUploadMobileData}
+            disabled={isUploadingToCloud || isDownloadingFromCloud}
+            accessibilityRole="button"
+            accessibilityLabel="Upload Mobile Data to Firebase"
+          >
+            <View style={[styles.iconBox, { backgroundColor: '#EDE9FE' }]}>
+              {isUploadingToCloud ? (
+                <ActivityIndicator size="small" color={theme.colors.primary} />
+              ) : (
+                <CloudUpload size={20} color={theme.colors.primary} />
+              )}
+            </View>
+            <View style={{ flex: 1, marginRight: 8 }}>
+              <Text style={styles.settingLabel}>Upload Mobile Data to Firebase</Text>
+              <Text style={styles.settingDesc} numberOfLines={2}>
+                {isUploadingToCloud
+                  ? 'Uploading local pools, transactions & members...'
+                  : 'Push all local data to your Firebase cloud database'}
+              </Text>
+            </View>
+            <ChevronRight size={18} color={theme.colors.textMuted} />
+          </TouchableOpacity>
+
+          {/* Option: Download Firebase Data to Mobile App */}
+          <TouchableOpacity
+            style={[styles.syncActionRow, { borderBottomWidth: 0 }]}
+            onPress={handleDownloadCloudData}
+            disabled={isUploadingToCloud || isDownloadingFromCloud}
+            accessibilityRole="button"
+            accessibilityLabel="Download Firebase Data to Mobile App"
+          >
+            <View style={[styles.iconBox, { backgroundColor: '#ECFDF5' }]}>
+              {isDownloadingFromCloud ? (
+                <ActivityIndicator size="small" color="#059669" />
+              ) : (
+                <CloudDownload size={20} color="#059669" />
+              )}
+            </View>
+            <View style={{ flex: 1, marginRight: 8 }}>
+              <Text style={[styles.settingLabel, { color: '#059669' }]}>
+                Download Firebase Data to Mobile App
+              </Text>
+              <Text style={styles.settingDesc} numberOfLines={2}>
+                {isDownloadingFromCloud
+                  ? 'Downloading cloud database snapshot...'
+                  : 'Pull latest pools & transactions from Firebase to local storage'}
+              </Text>
+            </View>
+            <ChevronRight size={18} color={theme.colors.textMuted} />
+          </TouchableOpacity>
+        </View>
+
+        {/* ======================================================== */}
+        {/* SECTION 2: BUDGET POOLS & PREFERENCES */}
+        {/* ======================================================== */}
+        <View style={styles.sectionHeaderWrap}>
+          <View style={styles.sectionHeaderRow}>
+            <View style={styles.sectionHeaderIconBadge}>
+              <Sliders size={14} color={theme.colors.primary} />
+            </View>
+            <Text style={styles.sectionHeaderTitle}>Budget Pools &amp; Preferences</Text>
+          </View>
+          <Text style={styles.sectionHeaderSubtitle}>
+            Manage multiple trip pools, pool names, currency &amp; alerts
+          </Text>
+        </View>
+
         {/* Active Budget Pool Selection */}
         <View style={styles.card}>
           <View style={styles.cardHeaderRow}>
@@ -259,60 +460,6 @@ export const SettingsScreen: React.FC = () => {
                 </TouchableOpacity>
               );
             })}
-          </View>
-        </View>
-
-        {/* Firebase Cloud Sync & Offline Architecture Card */}
-        <View style={styles.card}>
-          <View style={styles.cardHeaderRow}>
-            <View>
-              <Text style={styles.cardTitle}>Cloud Synchronization</Text>
-              <Text style={styles.cardSubtitle}>
-                Firebase Firestore multi-device sync & offline persistence
-              </Text>
-            </View>
-            <View
-              style={[
-                styles.syncStatusBadge,
-                isCloudSyncActive ? styles.syncBadgeOnline : styles.syncBadgeOffline,
-              ]}
-            >
-              <Text
-                style={[
-                  styles.syncStatusText,
-                  isCloudSyncActive ? styles.syncTextOnline : styles.syncTextOffline,
-                ]}
-              >
-                {isCloudSyncActive ? 'ONLINE' : 'OFFLINE'}
-              </Text>
-            </View>
-          </View>
-
-          <View style={styles.syncRow}>
-            <View style={styles.syncRowLeft}>
-              {isCloudSyncActive ? (
-                <Cloud size={20} color="#059669" />
-              ) : (
-                <CloudOff size={20} color="#D97706" />
-              )}
-              <View style={styles.syncTextGroup}>
-                <Text style={styles.syncLabel}>
-                  {isCloudSyncActive ? 'Real-Time Cloud Sync' : 'Local Offline Mode'}
-                </Text>
-                <Text style={styles.syncDesc}>
-                  {isCloudSyncActive
-                    ? 'Connected to pocket-pool-by-moid. All changes sync in real-time.'
-                    : 'Changes queue in Firestore offline cache and sync upon reconnection.'}
-                </Text>
-              </View>
-            </View>
-            <Switch
-              value={isCloudSyncActive}
-              onValueChange={toggleCloudSync}
-              trackColor={{ false: '#CBD5E1', true: '#A7F3D0' }}
-              thumbColor={isCloudSyncActive ? '#059669' : '#94A3B8'}
-              accessibilityLabel="Toggle Firebase Cloud Synchronization"
-            />
           </View>
         </View>
 
@@ -409,12 +556,46 @@ export const SettingsScreen: React.FC = () => {
           </View>
         </View>
 
+        {/* ======================================================== */}
+        {/* SECTION 3: INVOICING & DATA EXPORT */}
+        {/* ======================================================== */}
+        <View style={styles.sectionHeaderWrap}>
+          <View style={styles.sectionHeaderRow}>
+            <View style={[styles.sectionHeaderIconBadge, { backgroundColor: '#E0F2FE' }]}>
+              <FileSpreadsheet size={14} color="#0284C7" />
+            </View>
+            <Text style={[styles.sectionHeaderTitle, { color: '#0284C7' }]}>
+              Invoicing &amp; Data Export
+            </Text>
+          </View>
+          <Text style={styles.sectionHeaderSubtitle}>
+            Export printable PDF invoices or Excel spreadsheets
+          </Text>
+        </View>
+
         {/* Invoicing & Data Export (PDF & CSV) */}
         <ExportManager
           onExport={async (format, timeframe) => {
             return exportReport(format, timeframe);
           }}
         />
+
+        {/* ======================================================== */}
+        {/* SECTION 4: SECURITY & PRIVACY */}
+        {/* ======================================================== */}
+        <View style={styles.sectionHeaderWrap}>
+          <View style={styles.sectionHeaderRow}>
+            <View style={[styles.sectionHeaderIconBadge, { backgroundColor: '#FEF3C7' }]}>
+              <Shield size={14} color="#D97706" />
+            </View>
+            <Text style={[styles.sectionHeaderTitle, { color: '#D97706' }]}>
+              Security &amp; Privacy
+            </Text>
+          </View>
+          <Text style={styles.sectionHeaderSubtitle}>
+            Protect financial data with FaceID, TouchID, or PIN on launch
+          </Text>
+        </View>
 
         {/* Security & Biometrics Card */}
         <View style={styles.card}>
@@ -472,6 +653,23 @@ export const SettingsScreen: React.FC = () => {
               <Text style={styles.lockNowText}>Lock PocketPool Now</Text>
             </TouchableOpacity>
           )}
+        </View>
+
+        {/* ======================================================== */}
+        {/* SECTION 5: DATA MANAGEMENT & RESET */}
+        {/* ======================================================== */}
+        <View style={styles.sectionHeaderWrap}>
+          <View style={styles.sectionHeaderRow}>
+            <View style={[styles.sectionHeaderIconBadge, { backgroundColor: '#FEE2E2' }]}>
+              <Database size={14} color="#DC2626" />
+            </View>
+            <Text style={[styles.sectionHeaderTitle, { color: '#DC2626' }]}>
+              Data Management &amp; Reset
+            </Text>
+          </View>
+          <Text style={styles.sectionHeaderSubtitle}>
+            Local JSON database backups and factory reset options
+          </Text>
         </View>
 
         {/* Local JSON Database Management */}
@@ -1189,5 +1387,56 @@ const styles = StyleSheet.create({
     fontSize: 11,
     color: theme.colors.textSecondary,
     marginTop: 2,
+  },
+  sectionHeaderWrap: {
+    marginHorizontal: 20,
+    marginTop: 22,
+    marginBottom: 4,
+  },
+  sectionHeaderRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+  },
+  sectionHeaderIconBadge: {
+    width: 26,
+    height: 26,
+    borderRadius: 8,
+    backgroundColor: '#EDE9FE',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  sectionHeaderTitle: {
+    fontSize: 12,
+    fontWeight: '800',
+    color: theme.colors.primary,
+    letterSpacing: 0.8,
+    textTransform: 'uppercase',
+  },
+  sectionHeaderSubtitle: {
+    fontSize: 12,
+    color: theme.colors.textMuted,
+    marginTop: 2,
+    marginLeft: 34,
+  },
+  cardDivider: {
+    height: 1,
+    backgroundColor: '#F1F5F9',
+    marginVertical: 14,
+  },
+  cardSectionLabel: {
+    fontSize: 11,
+    fontWeight: '700',
+    color: theme.colors.textMuted,
+    letterSpacing: 0.8,
+    marginBottom: 6,
+  },
+  syncActionRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingVertical: 12,
+    borderBottomWidth: 1,
+    borderBottomColor: '#F1F5F9',
+    gap: 12,
   },
 });

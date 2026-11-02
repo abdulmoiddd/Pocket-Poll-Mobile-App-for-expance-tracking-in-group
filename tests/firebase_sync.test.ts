@@ -1,4 +1,5 @@
 import { FirebaseService, sanitizeFirestorePayload } from '../src/services/firebase';
+import { PocketPoolApi } from '../src/services/api';
 import { BudgetPool, Transaction, Member, AppSettings } from '../types';
 
 function assert(condition: boolean, message: string) {
@@ -253,6 +254,22 @@ export async function runFirebaseSyncTests(): Promise<boolean> {
   assert(fetchedSettings?.thresholdAmount === 250, 'Custom threshold persisted in settings doc');
   assertionsPassed++;
   console.log('  ✅ PASS: App settings synchronized to Firebase settings/app_settings document');
+
+  // 7. Test Mobile-to-Cloud Upload & Cloud-to-Mobile Download via PocketPool Unified API
+  console.log('  📲 Testing PocketPoolApi Upload & Download Synchronization...');
+  const uploadStats = await PocketPoolApi.uploadLocalDataToCloud();
+  assert(uploadStats.poolsCount > 0, 'uploadLocalDataToCloud uploaded budget pools to Firebase');
+  assertionsPassed++;
+  assert(uploadStats.membersCount > 0, 'uploadLocalDataToCloud uploaded members to Firebase');
+  assertionsPassed++;
+  console.log(`  ✅ PASS: Uploaded ${uploadStats.poolsCount} pools, ${uploadStats.txCount} txs, ${uploadStats.membersCount} members to Firebase`);
+
+  const downloadStats = await PocketPoolApi.downloadCloudDataToLocal();
+  assert(downloadStats.poolsCount >= uploadStats.poolsCount, 'downloadCloudDataToLocal fetched cloud budget pools');
+  assertionsPassed++;
+  assert(downloadStats.membersCount >= uploadStats.membersCount, 'downloadCloudDataToLocal fetched cloud members');
+  assertionsPassed++;
+  console.log(`  ✅ PASS: Downloaded ${downloadStats.poolsCount} pools, ${downloadStats.txCount} txs, ${downloadStats.membersCount} members from Firebase`);
 
   // Clean up test documents
   await FirebaseService.deleteBudget(testBudget1.id);

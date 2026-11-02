@@ -65,23 +65,29 @@ export const ExportManager: React.FC<ExportManagerProps> = ({ onExport }) => {
             selectedFormat === 'pdf' && styles.selectedFormatBtn,
           ]}
           accessibilityRole="button"
-          accessibilityLabel="PDF Invoice Format"
+          accessibilityLabel="Export as PDF"
           accessibilityState={{ selected: selectedFormat === 'pdf' }}
         >
           <FileText
-            size={20}
+            size={18}
             color={selectedFormat === 'pdf' ? theme.colors.primary : theme.colors.textMuted}
           />
-          <View>
+          <View style={styles.formatBtnTextCol}>
             <Text
               style={[
                 styles.formatTitle,
                 selectedFormat === 'pdf' && styles.selectedFormatTitle,
               ]}
+              numberOfLines={1}
+              ellipsizeMode="tail"
+              adjustsFontSizeToFit
+              minimumFontScale={0.8}
             >
-              PDF Invoice
+              Export as PDF
             </Text>
-            <Text style={styles.formatDesc}>Executive Printable Invoice</Text>
+            <Text style={styles.formatDesc} numberOfLines={1} ellipsizeMode="tail">
+              Printable Invoice
+            </Text>
           </View>
         </TouchableOpacity>
 
@@ -92,23 +98,29 @@ export const ExportManager: React.FC<ExportManagerProps> = ({ onExport }) => {
             selectedFormat === 'csv' && styles.selectedFormatBtn,
           ]}
           accessibilityRole="button"
-          accessibilityLabel="CSV Spreadsheet Format"
+          accessibilityLabel="Export as XL Sheet"
           accessibilityState={{ selected: selectedFormat === 'csv' }}
         >
           <FileSpreadsheet
-            size={20}
+            size={18}
             color={selectedFormat === 'csv' ? '#059669' : theme.colors.textMuted}
           />
-          <View>
+          <View style={styles.formatBtnTextCol}>
             <Text
               style={[
                 styles.formatTitle,
                 selectedFormat === 'csv' && { color: '#059669' },
               ]}
+              numberOfLines={1}
+              ellipsizeMode="tail"
+              adjustsFontSizeToFit
+              minimumFontScale={0.8}
             >
-              CSV Spreadsheet
+              Export as XL Sheet
             </Text>
-            <Text style={styles.formatDesc}>Excel & Sheets Compatible</Text>
+            <Text style={styles.formatDesc} numberOfLines={1} ellipsizeMode="tail">
+              Excel / CSV Sheet
+            </Text>
           </View>
         </TouchableOpacity>
       </View>
@@ -212,26 +224,32 @@ const styles = StyleSheet.create({
   },
   formatRow: {
     flexDirection: 'row',
-    gap: 10,
+    gap: 8,
     marginBottom: 16,
   },
   formatBtn: {
     flex: 1,
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 10,
+    gap: 8,
     backgroundColor: '#F8FAFC',
     borderRadius: theme.borderRadius.md,
-    padding: 12,
+    paddingVertical: 10,
+    paddingHorizontal: 8,
     borderWidth: 1.5,
     borderColor: theme.colors.border,
+    minHeight: 56,
+  },
+  formatBtnTextCol: {
+    flex: 1,
+    overflow: 'hidden',
   },
   selectedFormatBtn: {
     backgroundColor: theme.colors.primaryLight,
     borderColor: theme.colors.primary,
   },
   formatTitle: {
-    fontSize: 13,
+    fontSize: 12,
     fontWeight: '700',
     color: theme.colors.textPrimary,
   },

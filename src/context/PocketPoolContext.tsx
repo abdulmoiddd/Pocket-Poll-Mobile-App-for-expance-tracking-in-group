@@ -83,6 +83,8 @@ interface PocketPoolContextType {
   resetToZero: () => Promise<void>;
   exportJSONBackup: () => Promise<string>;
   importJSONBackup: (json: string) => Promise<boolean>;
+  uploadLocalDataToCloud: () => Promise<{ poolsCount: number; txCount: number; membersCount: number }>;
+  downloadCloudDataToLocal: () => Promise<{ poolsCount: number; txCount: number; membersCount: number }>;
 }
 
 const PocketPoolContext = createContext<PocketPoolContextType | undefined>(undefined);
@@ -663,6 +665,81 @@ export const PocketPoolProvider: React.FC<{ children: ReactNode }> = ({ children
     return success;
   };
 
+  /**
+   * Explicitly uploads all local device data (pools, transactions, members, settings) to Firebase Cloud Firestore
+   */
+  const uploadLocalDataToCloud = async (): Promise<{
+    poolsCount: number;
+    txCount: number;
+    membersCount: number;
+  }> => {
+    let poolsCount = 0;
+    let txCount = 0;
+    let membersCount = 0;
+
+    for (const pool of pools) {
+      await FirebaseService.saveBudget(pool);
+      poolsCount++;
+    }
+
+    for (const tx of allTransactions) {
+      const pId = tx.poolId || pools[0]?.id || 'pool_summer_trip';
+      await FirebaseService.saveTransaction(pId, tx);
+      txCount++;
+    }
+
+    for (const member of members) {
+      await FirebaseService.saveMember(member);
+      membersCount++;
+    }
+
+    await FirebaseService.saveSettings(settings);
+
+    return { poolsCount, txCount, membersCount };
+  };
+
+  /**
+   * Explicitly downloads all cloud data from Firebase Cloud Firestore and updates local device storage & UI state
+   */
+  const downloadCloudDataToLocal = async (): Promise<{
+    poolsCount: number;
+    txCount: number;
+    membersCount: number;
+  }> => {
+    const cloudBudgets = await FirebaseService.getBudgetsOnce();
+    const finalPools = cloudBudgets.length > 0 ? cloudBudgets : pools;
+
+    const allDownloadedTxs: Transaction[] = [];
+    for (const pool of finalPools) {
+      const txs = await FirebaseService.getTransactionsOnce(pool.id);
+      allDownloadedTxs.push(...txs);
+    }
+
+    const cloudMembers = await FirebaseService.getMembersOnce();
+    const finalMembers = cloudMembers.length > 0 ? cloudMembers : members;
+
+    const cloudSettings = await FirebaseService.getSettingsOnce();
+    const finalSettings = cloudSettings || settings;
+
+    // Update state
+    setPools(finalPools);
+    setAllTransactions(allDownloadedTxs);
+    setMembers(finalMembers);
+    setSettings(finalSettings);
+
+    // Save to local storage
+    await StorageService.savePools(finalPools);
+    await StorageService.saveTransactions(allDownloadedTxs);
+    await StorageService.saveMembers(finalMembers);
+    await StorageService.saveSettings(finalSettings);
+
+    return {
+      poolsCount: finalPools.length,
+      txCount: allDownloadedTxs.length,
+      membersCount: finalMembers.length,
+    };
+  };
+
   return (
     <PocketPoolContext.Provider
       value={{
@@ -703,6 +780,8 @@ export const PocketPoolProvider: React.FC<{ children: ReactNode }> = ({ children
         resetToZero,
         exportJSONBackup,
         importJSONBackup,
+        uploadLocalDataToCloud,
+        downloadCloudDataToLocal,
       }}
     >
       {children}
