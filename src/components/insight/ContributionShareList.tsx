@@ -52,19 +52,21 @@ export const ContributionShareList: React.FC<ContributionShareListProps> = ({
                     >
                       <Text style={styles.avatarText}>{initials}</Text>
                     </View>
-                    <View>
-                      <Text style={styles.name}>{m.memberName}</Text>
-                      <Text style={styles.countText}>
+                    <View style={styles.memberTextCol}>
+                      <Text style={styles.name} numberOfLines={1} ellipsizeMode="tail">
+                        {m.memberName}
+                      </Text>
+                      <Text style={styles.countText} numberOfLines={1}>
                         {m.contributionCount} {m.contributionCount === 1 ? 'deposit' : 'deposits'}
                       </Text>
                     </View>
                   </View>
 
                   <View style={styles.right}>
-                    <Text style={styles.amount}>
+                    <Text style={styles.amount} numberOfLines={1} ellipsizeMode="tail">
                       {formatCurrency(m.totalContributed, currencySymbol)}
                     </Text>
-                    <Text style={styles.percentText}>{m.percentageOfPool}%</Text>
+                    <Text style={styles.percentText} numberOfLines={1}>{m.percentageOfPool}%</Text>
                   </View>
                 </View>
 
@@ -132,9 +134,14 @@ const styles = StyleSheet.create({
     alignItems: 'center',
   },
   left: {
+    flex: 1,
     flexDirection: 'row',
     alignItems: 'center',
     gap: 10,
+    marginRight: 8,
+  },
+  memberTextCol: {
+    flex: 1,
   },
   avatar: {
     width: 36,
@@ -142,6 +149,7 @@ const styles = StyleSheet.create({
     borderRadius: 18,
     alignItems: 'center',
     justifyContent: 'center',
+    flexShrink: 0,
   },
   avatarText: {
     color: '#FFFFFF',
@@ -160,6 +168,7 @@ const styles = StyleSheet.create({
   },
   right: {
     alignItems: 'flex-end',
+    flexShrink: 0,
   },
   amount: {
     fontSize: 14,

@@ -85,6 +85,8 @@ export const MemberSelector: React.FC<MemberSelectorProps> = ({
                   styles.memberName,
                   isSelected && styles.selectedMemberName,
                 ]}
+                numberOfLines={1}
+                ellipsizeMode="tail"
               >
                 {member.name.split(' ')[0]}
               </Text>
@@ -210,6 +212,8 @@ const styles = StyleSheet.create({
     fontSize: 13,
     fontWeight: '600',
     color: theme.colors.textPrimary,
+    maxWidth: 100,
+    flexShrink: 1,
   },
   selectedMemberName: {
     color: theme.colors.primary,

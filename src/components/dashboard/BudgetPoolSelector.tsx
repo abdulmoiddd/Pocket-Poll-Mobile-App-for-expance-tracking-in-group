@@ -168,13 +168,13 @@ export const BudgetPoolSelector: React.FC = () => {
                   <View style={styles.activeIconCircle}>
                     <Check size={11} color="#5A48D6" strokeWidth={3} />
                   </View>
-                  <Text style={styles.activePillText} numberOfLines={1}>
+                  <Text style={styles.activePillText} numberOfLines={1} ellipsizeMode="tail">
                     {pool.name}
                   </Text>
                   <ChevronDown size={14} color="#5A48D6" style={styles.chevronMargin} />
                 </>
               ) : (
-                <Text style={styles.inactivePillText} numberOfLines={1}>
+                <Text style={styles.inactivePillText} numberOfLines={1} ellipsizeMode="tail">
                   {pool.name}
                 </Text>
               )}
@@ -274,6 +274,8 @@ export const BudgetPoolSelector: React.FC = () => {
                                 styles.poolItemName,
                                 isActive && styles.poolItemNameActive,
                               ]}
+                              numberOfLines={1}
+                              ellipsizeMode="tail"
                             >
                               {pool.name}
                             </Text>
@@ -284,11 +286,11 @@ export const BudgetPoolSelector: React.FC = () => {
                             )}
                           </View>
                           {pool.description ? (
-                            <Text style={styles.poolItemDesc} numberOfLines={1}>
+                            <Text style={styles.poolItemDesc} numberOfLines={2} ellipsizeMode="tail">
                               {pool.description}
                             </Text>
                           ) : null}
-                          <Text style={styles.poolItemMeta}>
+                          <Text style={styles.poolItemMeta} numberOfLines={1}>
                             {txCount} {txCount === 1 ? 'transaction' : 'transactions'}
                           </Text>
                         </View>
@@ -458,6 +460,7 @@ const styles = StyleSheet.create({
     fontWeight: '800',
     fontSize: 13,
     letterSpacing: -0.2,
+    maxWidth: 160,
   },
   chevronMargin: {
     marginLeft: 4,
@@ -466,6 +469,7 @@ const styles = StyleSheet.create({
     color: '#FFFFFF',
     fontWeight: '600',
     fontSize: 13,
+    maxWidth: 160,
   },
   newPoolPill: {
     flexDirection: 'row',
@@ -604,11 +608,14 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     gap: 8,
+    flexWrap: 'wrap',
   },
   poolItemName: {
     fontSize: 15,
     fontWeight: '700',
     color: theme.colors.textPrimary,
+    flexShrink: 1,
+    maxWidth: 200,
   },
   poolItemNameActive: {
     color: '#5A48D6',
@@ -618,6 +625,7 @@ const styles = StyleSheet.create({
     paddingHorizontal: 6,
     paddingVertical: 2,
     borderRadius: 4,
+    flexShrink: 0,
   },
   activeTagText: {
     color: '#FFFFFF',
@@ -640,6 +648,7 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     gap: 4,
     marginLeft: 8,
+    flexShrink: 0,
   },
   actionIconButton: {
     padding: 6,

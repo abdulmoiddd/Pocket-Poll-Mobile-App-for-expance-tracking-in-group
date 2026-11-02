@@ -102,6 +102,8 @@ export const CategoryGrid: React.FC<CategoryGridProps> = ({
                 styles.label,
                 { color: isSelected ? item.color : theme.colors.textPrimary },
               ]}
+              numberOfLines={1}
+              ellipsizeMode="tail"
             >
               {item.label}
             </Text>

@@ -67,6 +67,28 @@ export const db: Firestore = createFirestoreInstance();
 let isCloudSyncActive = true;
 
 /**
+ * Recursively sanitizes any payload destined for Firestore setDoc / updateDoc.
+ * - Strips any `undefined` values (which Firestore rejects with "Unsupported field value: undefined").
+ * - Ensures empty optional string values are safely mapped to null or stripped.
+ * - Recursively processes nested objects.
+ */
+export function sanitizeFirestorePayload<T extends Record<string, any>>(obj: T): Record<string, any> {
+  const result: Record<string, any> = {};
+  for (const [key, value] of Object.entries(obj)) {
+    if (value === undefined) {
+      continue; // Never pass undefined to Firestore
+    } else if (value === null) {
+      result[key] = null;
+    } else if (typeof value === 'object' && !Array.isArray(value) && !(value instanceof Date)) {
+      result[key] = sanitizeFirestorePayload(value);
+    } else {
+      result[key] = value;
+    }
+  }
+  return result;
+}
+
+/**
  * Firebase Cloud Firestore Service
  * Provides offline-first caching, real-time listeners, and cloud synchronization
  * for multiple budgets, sub-collection transactions, members, and settings.
@@ -146,14 +168,15 @@ export const FirebaseService = {
    */
   async saveBudget(budget: BudgetPool): Promise<void> {
     const budgetRef = doc(db, 'budgets', budget.id);
-    await setDoc(budgetRef, {
+    const payload = sanitizeFirestorePayload({
       id: budget.id,
       name: budget.name,
-      description: budget.description || '',
+      description: budget.description?.trim() || null,
       createdAt: budget.createdAt || Date.now(),
-      thresholdAmount: budget.thresholdAmount || 200,
+      thresholdAmount: budget.thresholdAmount ?? 200,
       updatedAt: Date.now(),
     });
+    await setDoc(budgetRef, payload);
   },
 
   /**
@@ -231,29 +254,22 @@ export const FirebaseService = {
    */
   async saveTransaction(budgetId: string, transaction: Transaction): Promise<void> {
     const txRef = doc(db, 'budgets', budgetId, 'transactions', transaction.id);
-    const payload: Record<string, any> = {
+    const payload = sanitizeFirestorePayload({
       id: transaction.id,
       poolId: budgetId,
       type: transaction.type,
       amount: Number(transaction.amount) || 0,
       memberId: transaction.memberId || '',
       memberName: transaction.memberName || '',
-      date: transaction.date,
-      paymentMethod: transaction.paymentMethod,
+      date: transaction.date || new Date().toISOString().split('T')[0],
+      paymentMethod: transaction.paymentMethod || 'Cash',
       notes: transaction.notes || '',
+      category: transaction.category || null,
+      receiptName: transaction.receiptName || null,
+      receiptUri: transaction.receiptUri || null,
       createdAt: transaction.createdAt || Date.now(),
       updatedAt: Date.now(),
-    };
-
-    if (transaction.category) {
-      payload.category = transaction.category;
-    }
-    if (transaction.receiptName) {
-      payload.receiptName = transaction.receiptName;
-    }
-    if (transaction.receiptUri) {
-      payload.receiptUri = transaction.receiptUri;
-    }
+    });
 
     await setDoc(txRef, payload);
   },
@@ -342,10 +358,18 @@ export const FirebaseService = {
 
   async saveMember(member: Member): Promise<void> {
     const memberRef = doc(db, 'members', member.id);
-    await setDoc(memberRef, {
-      ...member,
+    const payload = sanitizeFirestorePayload({
+      id: member.id,
+      name: member.name || '',
+      avatarColor: member.avatarColor || '#7B66FF',
+      avatarText: member.avatarText || 'PP',
+      email: member.email?.trim() || null,
+      phone: member.phone?.trim() || null,
+      totalContributed: Number(member.totalContributed) || 0,
+      joinedAt: member.joinedAt || new Date().toISOString().split('T')[0],
       updatedAt: Date.now(),
     });
+    await setDoc(memberRef, payload);
   },
 
   async deleteMember(memberId: string): Promise<void> {
@@ -387,10 +411,18 @@ export const FirebaseService = {
 
   async saveSettings(settings: AppSettings): Promise<void> {
     const settingsRef = doc(db, 'settings', 'app_settings');
-    await setDoc(settingsRef, {
-      ...settings,
+    const payload = sanitizeFirestorePayload({
+      currencySymbol: settings.currencySymbol || '$',
+      currencyCode: settings.currencyCode || 'USD',
+      groupName: settings.groupName || 'PocketPool',
+      thresholdAmount: settings.thresholdAmount ?? 200,
+      biometricEnabled: !!settings.biometricEnabled,
+      pinCode: settings.pinCode || '1234',
+      activePoolId: settings.activePoolId || null,
+      isFirstLaunch: !!settings.isFirstLaunch,
       updatedAt: Date.now(),
     });
+    await setDoc(settingsRef, payload);
   },
 
   subscribeToSettings(

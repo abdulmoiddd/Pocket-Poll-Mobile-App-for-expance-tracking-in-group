@@ -66,14 +66,18 @@ export const CategoryBreakdown: React.FC<CategoryBreakdownProps> = ({
                   >
                     {getCategoryIcon(cat.category, cat.color)}
                   </View>
-                  <Text style={styles.catName}>{cat.category}</Text>
+                  <Text style={styles.catName} numberOfLines={1} ellipsizeMode="tail">
+                    {cat.category}
+                  </Text>
                 </View>
 
                 <View style={styles.rightGroup}>
-                  <Text style={styles.catAmount}>
+                  <Text style={styles.catAmount} numberOfLines={1} ellipsizeMode="tail">
                     {formatCurrency(cat.amount, currencySymbol)}
                   </Text>
-                  <Text style={styles.catPercent}>{cat.percentage}%</Text>
+                  <Text style={styles.catPercent} numberOfLines={1}>
+                    {cat.percentage}%
+                  </Text>
                 </View>
               </View>
 
@@ -141,9 +145,11 @@ const styles = StyleSheet.create({
     alignItems: 'center',
   },
   leftGroup: {
+    flex: 1,
     flexDirection: 'row',
     alignItems: 'center',
     gap: 10,
+    marginRight: 8,
   },
   iconCircle: {
     width: 32,
@@ -151,16 +157,19 @@ const styles = StyleSheet.create({
     borderRadius: 16,
     alignItems: 'center',
     justifyContent: 'center',
+    flexShrink: 0,
   },
   catName: {
     fontSize: 14,
     fontWeight: '600',
     color: theme.colors.textPrimary,
+    flex: 1,
   },
   rightGroup: {
     flexDirection: 'row',
     alignItems: 'baseline',
     gap: 8,
+    flexShrink: 0,
   },
   catAmount: {
     fontSize: 14,
