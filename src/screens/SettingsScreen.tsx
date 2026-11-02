@@ -29,15 +29,23 @@ import {
   Trash2,
   Save,
   CheckCircle,
+  Check,
   AlertTriangle,
   ChevronRight,
   FileCode,
   Users,
+  Cloud,
+  CloudOff,
 } from 'lucide-react-native';
 
 export const SettingsScreen: React.FC = () => {
   const {
     settings,
+    pools,
+    activePoolId,
+    switchPool,
+    isCloudSyncActive,
+    toggleCloudSync,
     updateSettings,
     exportReport,
     resetToDefaults,
@@ -213,6 +221,100 @@ export const SettingsScreen: React.FC = () => {
             </TouchableOpacity>
           </View>
         )}
+
+        {/* Active Budget Pool Selection */}
+        <View style={styles.card}>
+          <View style={styles.cardHeaderRow}>
+            <View>
+              <Text style={styles.cardTitle}>Active Budget Pool</Text>
+              <Text style={styles.cardSubtitle}>
+                Switch between different trips, vacations, and events
+              </Text>
+            </View>
+            <View style={styles.poolCountBadge}>
+              <Text style={styles.poolCountText}>{pools.length} pools</Text>
+            </View>
+          </View>
+
+          <View style={styles.poolButtonsGrid}>
+            {pools.map((p) => {
+              const isSelected = p.id === activePoolId;
+              return (
+                <TouchableOpacity
+                  key={p.id}
+                  style={[styles.settingsPoolPill, isSelected && styles.settingsPoolPillActive]}
+                  onPress={() => switchPool(p.id)}
+                  accessibilityRole="button"
+                  accessibilityLabel={`Switch to ${p.name}`}
+                >
+                  <Text
+                    style={[
+                      styles.settingsPoolPillText,
+                      isSelected && styles.settingsPoolPillTextActive,
+                    ]}
+                  >
+                    {p.name}
+                  </Text>
+                  {isSelected && <Check size={14} color="#5A48D6" strokeWidth={2.5} />}
+                </TouchableOpacity>
+              );
+            })}
+          </View>
+        </View>
+
+        {/* Firebase Cloud Sync & Offline Architecture Card */}
+        <View style={styles.card}>
+          <View style={styles.cardHeaderRow}>
+            <View>
+              <Text style={styles.cardTitle}>Cloud Synchronization</Text>
+              <Text style={styles.cardSubtitle}>
+                Firebase Firestore multi-device sync & offline persistence
+              </Text>
+            </View>
+            <View
+              style={[
+                styles.syncStatusBadge,
+                isCloudSyncActive ? styles.syncBadgeOnline : styles.syncBadgeOffline,
+              ]}
+            >
+              <Text
+                style={[
+                  styles.syncStatusText,
+                  isCloudSyncActive ? styles.syncTextOnline : styles.syncTextOffline,
+                ]}
+              >
+                {isCloudSyncActive ? 'ONLINE' : 'OFFLINE'}
+              </Text>
+            </View>
+          </View>
+
+          <View style={styles.syncRow}>
+            <View style={styles.syncRowLeft}>
+              {isCloudSyncActive ? (
+                <Cloud size={20} color="#059669" />
+              ) : (
+                <CloudOff size={20} color="#D97706" />
+              )}
+              <View style={styles.syncTextGroup}>
+                <Text style={styles.syncLabel}>
+                  {isCloudSyncActive ? 'Real-Time Cloud Sync' : 'Local Offline Mode'}
+                </Text>
+                <Text style={styles.syncDesc}>
+                  {isCloudSyncActive
+                    ? 'Connected to pocket-pool-by-moid. All changes sync in real-time.'
+                    : 'Changes queue in Firestore offline cache and sync upon reconnection.'}
+                </Text>
+              </View>
+            </View>
+            <Switch
+              value={isCloudSyncActive}
+              onValueChange={toggleCloudSync}
+              trackColor={{ false: '#CBD5E1', true: '#A7F3D0' }}
+              thumbColor={isCloudSyncActive ? '#059669' : '#94A3B8'}
+              accessibilityLabel="Toggle Firebase Cloud Synchronization"
+            />
+          </View>
+        </View>
 
         {/* Group / Pool Name Card */}
         <View style={styles.card}>
@@ -986,5 +1088,106 @@ const styles = StyleSheet.create({
     color: '#FFFFFF',
     fontSize: 14,
     fontWeight: '700',
+  },
+  cardHeaderRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'flex-start',
+    marginBottom: 4,
+  },
+  poolCountBadge: {
+    backgroundColor: '#F1F5F9',
+    paddingHorizontal: 8,
+    paddingVertical: 3,
+    borderRadius: 8,
+  },
+  poolCountText: {
+    fontSize: 11,
+    fontWeight: '700',
+    color: theme.colors.textSecondary,
+  },
+  poolButtonsGrid: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 8,
+    marginTop: 10,
+  },
+  settingsPoolPill: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    paddingVertical: 8,
+    paddingHorizontal: 14,
+    borderRadius: 20,
+    backgroundColor: '#F8FAFC',
+    borderWidth: 1,
+    borderColor: '#E2E8F0',
+  },
+  settingsPoolPillActive: {
+    backgroundColor: '#F5F3FF',
+    borderColor: '#7B66FF',
+    borderWidth: 1.5,
+  },
+  settingsPoolPillText: {
+    fontSize: 13,
+    fontWeight: '600',
+    color: theme.colors.textSecondary,
+  },
+  settingsPoolPillTextActive: {
+    color: '#5A48D6',
+    fontWeight: '700',
+  },
+  syncStatusBadge: {
+    paddingHorizontal: 8,
+    paddingVertical: 3,
+    borderRadius: 8,
+  },
+  syncBadgeOnline: {
+    backgroundColor: '#ECFDF5',
+  },
+  syncBadgeOffline: {
+    backgroundColor: '#FEF3C7',
+  },
+  syncStatusText: {
+    fontSize: 10,
+    fontWeight: '800',
+    letterSpacing: 0.5,
+  },
+  syncTextOnline: {
+    color: '#059669',
+  },
+  syncTextOffline: {
+    color: '#D97706',
+  },
+  syncRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    backgroundColor: '#F8FAFC',
+    borderWidth: 1,
+    borderColor: '#E2E8F0',
+    borderRadius: 14,
+    padding: 12,
+    marginTop: 12,
+  },
+  syncRowLeft: {
+    flex: 1,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 12,
+    marginRight: 10,
+  },
+  syncTextGroup: {
+    flex: 1,
+  },
+  syncLabel: {
+    fontSize: 14,
+    fontWeight: '700',
+    color: theme.colors.textPrimary,
+  },
+  syncDesc: {
+    fontSize: 11,
+    color: theme.colors.textSecondary,
+    marginTop: 2,
   },
 });

@@ -20,6 +20,7 @@
     },
     "android": {
       "package": "com.pocketpool.app",
+      "googleServicesFile": "./google-services.json",
       "adaptiveIcon": {
         "foregroundImage": "./assets/android-icon-foreground.png",
         "backgroundColor": "#5A48D6"

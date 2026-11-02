@@ -11,8 +11,10 @@ import {
   ExportFormat,
   ExportTimeframe,
   PaymentMethod,
+  BudgetPool,
 } from '../types';
-import { StorageService, DEFAULT_SETTINGS } from '../services/storage';
+import { StorageService, DEFAULT_SETTINGS, INITIAL_POOLS } from '../services/storage';
+import { FirebaseService } from '../services/firebase';
 import {
   calculateBudgetSummary,
   checkThresholdAlert,
@@ -28,7 +30,12 @@ interface PocketPoolContextType {
   // State
   isLoading: boolean;
   isLocked: boolean;
-  transactions: Transaction[];
+  isCloudSyncActive: boolean;
+  pools: BudgetPool[];
+  activePoolId: string;
+  activePool: BudgetPool;
+  allTransactions: Transaction[];
+  transactions: Transaction[]; // Active pool's isolated transactions
   members: Member[];
   settings: AppSettings;
   alerts: ThresholdAlert[];
@@ -41,6 +48,12 @@ interface PocketPoolContextType {
   // Actions
   unlockApp: () => void;
   lockApp: () => void;
+  toggleCloudSync: () => Promise<void>;
+  switchPool: (poolId: string) => Promise<void>;
+  createPool: (name: string, description?: string) => Promise<BudgetPool>;
+  deletePool: (poolId: string) => Promise<void>;
+  renamePool: (poolId: string, newName: string) => Promise<void>;
+  updatePool: (poolId: string, updates: Partial<BudgetPool>) => Promise<void>;
   addTransaction: (tx: Omit<Transaction, 'id' | 'createdAt'>) => Promise<Transaction>;
   deleteTransaction: (id: string) => Promise<void>;
   addMember: (
@@ -87,27 +100,31 @@ export const PocketPoolProvider: React.FC<{ children: ReactNode }> = ({ children
 
   const [isLoading, setIsLoading] = useState(true);
   const [isLocked, setIsLocked] = useState(false);
-  const [transactions, setTransactions] = useState<Transaction[]>([]);
+  const [isCloudSyncActive, setIsCloudSyncActive] = useState(true);
+  const [pools, setPools] = useState<BudgetPool[]>(INITIAL_POOLS);
+  const [activePoolId, setActivePoolId] = useState<string>(INITIAL_POOLS[0].id);
+  const [allTransactions, setAllTransactions] = useState<Transaction[]>([]);
   const [members, setMembers] = useState<Member[]>([]);
   const [settings, setSettings] = useState<AppSettings>(DEFAULT_SETTINGS);
   const [alerts, setAlerts] = useState<ThresholdAlert[]>([]);
 
-  // Initialize data on mount
+  // 1. Initialize data from local JSON storage first (instant offline availability)
   useEffect(() => {
     async function loadData() {
       try {
         const data = await StorageService.initialize();
-        setTransactions(data.transactions);
+        setPools(data.pools);
+        setActivePoolId(data.activePoolId);
+        setAllTransactions(data.transactions);
         setMembers(data.members);
         setSettings(data.settings);
         setAlerts(data.alerts);
 
-        // Check if biometric lock is required
         if (data.settings.biometricEnabled) {
           setIsLocked(true);
         }
       } catch (err) {
-        console.error('Failed to initialize PocketPool storage:', err);
+        console.error('Failed to initialize PocketPool local storage:', err);
       } finally {
         setIsLoading(false);
       }
@@ -115,22 +132,110 @@ export const PocketPoolProvider: React.FC<{ children: ReactNode }> = ({ children
     loadData();
   }, []);
 
-  // Compute budget summary
-  const budget = useMemo(() => {
-    return calculateBudgetSummary(transactions, settings.thresholdAmount, members);
-  }, [transactions, settings.thresholdAmount, members]);
+  // 2. Set up Firestore Real-time Listeners (Budgets, Members, Settings)
+  useEffect(() => {
+    // Real-time listener for budgets collection
+    const unsubBudgets = FirebaseService.subscribeToBudgets((cloudBudgets) => {
+      if (cloudBudgets.length > 0) {
+        setPools(cloudBudgets);
+        StorageService.savePools(cloudBudgets);
+      } else if (!isLoading && pools.length > 0) {
+        // First sync to fresh Firestore: seed initial pools to cloud
+        pools.forEach((p) => FirebaseService.saveBudget(p));
+      }
+    });
 
-  // Compute category breakdown
+    // Real-time listener for members collection
+    const unsubMembers = FirebaseService.subscribeToMembers((cloudMembers) => {
+      if (cloudMembers.length > 0) {
+        setMembers(cloudMembers);
+        StorageService.saveMembers(cloudMembers);
+      } else if (!isLoading && members.length > 0) {
+        members.forEach((m) => FirebaseService.saveMember(m));
+      }
+    });
+
+    // Real-time listener for settings document
+    const unsubSettings = FirebaseService.subscribeToSettings((cloudSettings) => {
+      if (cloudSettings) {
+        setSettings((prev) => ({ ...prev, ...cloudSettings }));
+        StorageService.saveSettings(cloudSettings);
+      }
+    });
+
+    return () => {
+      unsubBudgets();
+      unsubMembers();
+      unsubSettings();
+    };
+  }, [isLoading]);
+
+  // 3. Set up Firestore Real-time Listener for Active Budget's Sub-collection Transactions
+  useEffect(() => {
+    if (!activePoolId) return;
+
+    const unsubTxs = FirebaseService.subscribeToTransactions(activePoolId, (cloudTxs) => {
+      if (cloudTxs.length > 0) {
+        setAllTransactions((prev) => {
+          // Replace or merge transactions for this pool
+          const otherPoolsTxs = prev.filter((tx) => (tx.poolId || prev[0]?.poolId) !== activePoolId);
+          const updated = [...cloudTxs, ...otherPoolsTxs];
+          StorageService.saveTransactions(updated);
+          return updated;
+        });
+      } else if (!isLoading) {
+        // If local has transactions for this pool not yet in Firestore, queue them to Firestore
+        const localTxs = allTransactions.filter(
+          (tx) => (tx.poolId || pools[0]?.id) === activePoolId
+        );
+        if (localTxs.length > 0) {
+          localTxs.forEach((tx) => FirebaseService.saveTransaction(activePoolId, tx));
+        }
+      }
+    });
+
+    return () => {
+      unsubTxs();
+    };
+  }, [activePoolId, isLoading]);
+
+  // Compute active budget pool object
+  const activePool = useMemo<BudgetPool>(() => {
+    const found = pools.find((p) => p.id === activePoolId);
+    if (found) return found;
+    if (pools.length > 0) return pools[0];
+    return {
+      id: 'pool_default',
+      name: 'Main Budget',
+      createdAt: Date.now(),
+    };
+  }, [pools, activePoolId]);
+
+  // Compute transactions strictly isolated to the active budget pool (ZERO data bleed)
+  const transactions = useMemo<Transaction[]>(() => {
+    return allTransactions.filter((tx) => {
+      const txPool = tx.poolId || pools[0]?.id || 'pool_summer_trip';
+      return txPool === activePool.id;
+    });
+  }, [allTransactions, activePool.id, pools]);
+
+  // Compute budget summary for active pool
+  const budget = useMemo(() => {
+    const threshold = activePool.thresholdAmount || settings.thresholdAmount;
+    return calculateBudgetSummary(transactions, threshold, members);
+  }, [transactions, activePool.thresholdAmount, settings.thresholdAmount, members]);
+
+  // Compute category breakdown for active pool
   const categorySummaries = useMemo(() => {
     return getCategorySummaries(transactions);
   }, [transactions]);
 
-  // Compute member contributions
+  // Compute member contributions for active pool
   const memberSummaries = useMemo(() => {
     return getMemberContributionSummaries(transactions, members);
   }, [transactions, members]);
 
-  // Compute spending trend (last 7 days)
+  // Compute spending trend (last 7 days) for active pool
   const spendingTrend = useMemo(() => {
     return getSpendingTrend(transactions, 7);
   }, [transactions]);
@@ -149,9 +254,109 @@ export const PocketPoolProvider: React.FC<{ children: ReactNode }> = ({ children
   };
 
   /**
-   * Adds transaction (contribution or expense)
-   * Deducts expense from Total Budget or adds contribution to Total Budget.
-   * Checks and triggers threshold alert if budget drops below threshold.
+   * Toggle between Cloud Sync enabled and pure local offline cache mode
+   */
+  const toggleCloudSync = async () => {
+    if (isCloudSyncActive) {
+      await FirebaseService.disableCloudSync();
+      setIsCloudSyncActive(false);
+      toastApi?.info('Offline Mode Active', 'Operating entirely from local Firestore cache.');
+    } else {
+      await FirebaseService.enableCloudSync();
+      setIsCloudSyncActive(true);
+      toastApi?.success('Cloud Sync Restored', 'Synchronizing with Firebase Cloud backend.');
+    }
+  };
+
+  /**
+   * Switch active budget pool
+   */
+  const switchPool = async (poolId: string) => {
+    const targetPool = pools.find((p) => p.id === poolId);
+    if (!targetPool) return;
+    setActivePoolId(poolId);
+    await StorageService.saveActivePoolId(poolId);
+  };
+
+  /**
+   * Create a new budget pool and immediately sync to Firebase + local cache
+   */
+  const createPool = async (name: string, description?: string): Promise<BudgetPool> => {
+    const trimmed = name.trim();
+    const newPool: BudgetPool = {
+      id: `pool_${Date.now()}_${Math.random().toString(36).substr(2, 4)}`,
+      name: trimmed || 'Untitled Budget',
+      description: description?.trim() || undefined,
+      createdAt: Date.now(),
+    };
+
+    const updatedPools = [...pools, newPool];
+    setPools(updatedPools);
+    setActivePoolId(newPool.id);
+
+    // Save to Firestore (offline cache + cloud sync) and local JSON storage
+    await Promise.all([
+      FirebaseService.saveBudget(newPool),
+      StorageService.savePools(updatedPools),
+      StorageService.saveActivePoolId(newPool.id),
+    ]);
+
+    return newPool;
+  };
+
+  /**
+   * Update an existing budget pool in Firestore & local cache
+   */
+  const updatePool = async (poolId: string, updates: Partial<BudgetPool>) => {
+    const updatedPools = pools.map((p) => (p.id === poolId ? { ...p, ...updates } : p));
+    setPools(updatedPools);
+
+    const target = updatedPools.find((p) => p.id === poolId);
+    if (target) {
+      await FirebaseService.saveBudget(target);
+    }
+    await StorageService.savePools(updatedPools);
+  };
+
+  /**
+   * Rename an existing budget pool
+   */
+  const renamePool = async (poolId: string, newName: string) => {
+    await updatePool(poolId, { name: newName.trim() });
+  };
+
+  /**
+   * Delete a budget pool. If active, switches to the next available pool.
+   * At least one pool is always retained.
+   */
+  const deletePool = async (poolId: string) => {
+    if (pools.length <= 1) {
+      throw new Error('Cannot delete the only budget pool.');
+    }
+
+    const updatedPools = pools.filter((p) => p.id !== poolId);
+    const updatedTxs = allTransactions.filter((tx) => (tx.poolId || pools[0]?.id) !== poolId);
+
+    setPools(updatedPools);
+    setAllTransactions(updatedTxs);
+
+    let nextActiveId = activePoolId;
+    if (activePoolId === poolId) {
+      nextActiveId = updatedPools[0].id;
+      setActivePoolId(nextActiveId);
+    }
+
+    await Promise.all([
+      FirebaseService.deleteBudget(poolId),
+      StorageService.savePools(updatedPools),
+      StorageService.saveTransactions(updatedTxs),
+      StorageService.saveActivePoolId(nextActiveId),
+    ]);
+  };
+
+  /**
+   * Adds transaction (contribution or expense) attributed to active pool
+   * Immediately cached offline in Firestore, updates UI, and queues for cloud sync.
    */
   const addTransaction = async (
     txData: Omit<Transaction, 'id' | 'createdAt'>
@@ -160,19 +365,26 @@ export const PocketPoolProvider: React.FC<{ children: ReactNode }> = ({ children
 
     const newTransaction: Transaction = {
       ...txData,
+      poolId: txData.poolId || activePool.id,
       id: `tx_${Date.now()}_${Math.random().toString(36).substr(2, 4)}`,
       createdAt: Date.now(),
       amount: Number(txData.amount) || 0,
     };
 
-    const updatedTransactions = [newTransaction, ...transactions];
-    setTransactions(updatedTransactions);
-    await StorageService.saveTransactions(updatedTransactions);
+    const updatedAll = [newTransaction, ...allTransactions];
+    setAllTransactions(updatedAll);
 
-    // Calculate updated budget
+    // Save to Firestore sub-collection & local storage concurrently
+    await Promise.all([
+      FirebaseService.saveTransaction(newTransaction.poolId || activePool.id, newTransaction),
+      StorageService.saveTransactions(updatedAll),
+    ]);
+
+    // Calculate updated budget for active pool
+    const updatedActiveTxs = [newTransaction, ...transactions];
     const newBudgetSummary = calculateBudgetSummary(
-      updatedTransactions,
-      settings.thresholdAmount,
+      updatedActiveTxs,
+      activePool.thresholdAmount || settings.thresholdAmount,
       members
     );
 
@@ -180,7 +392,7 @@ export const PocketPoolProvider: React.FC<{ children: ReactNode }> = ({ children
     const alertCheck = checkThresholdAlert(
       previousBudget,
       newBudgetSummary.remainingBudget,
-      settings.thresholdAmount,
+      activePool.thresholdAmount || settings.thresholdAmount,
       settings.currencySymbol
     );
 
@@ -189,9 +401,9 @@ export const PocketPoolProvider: React.FC<{ children: ReactNode }> = ({ children
         id: `alert_${Date.now()}`,
         timestamp: Date.now(),
         remainingBudget: newBudgetSummary.remainingBudget,
-        threshold: settings.thresholdAmount,
+        threshold: activePool.thresholdAmount || settings.thresholdAmount,
         read: false,
-        message: alertCheck.message,
+        message: `[${activePool.name}] ${alertCheck.message}`,
       };
       const updatedAlerts = [newAlert, ...alerts];
       setAlerts(updatedAlerts);
@@ -200,12 +412,12 @@ export const PocketPoolProvider: React.FC<{ children: ReactNode }> = ({ children
       // Trigger interactive toaster notification on mobile
       if (toastApi) {
         if (alertCheck.alertType === 'danger') {
-          toastApi.danger('🚨 Budget Deficit Alert!', alertCheck.message, {
+          toastApi.danger(`🚨 ${activePool.name}: Deficit Alert!`, alertCheck.message, {
             actionText: 'Review Pool',
             duration: 6000,
           });
         } else {
-          toastApi.warning('⚠️ Low Budget Alert!', alertCheck.message, {
+          toastApi.warning(`⚠️ ${activePool.name}: Low Budget!`, alertCheck.message, {
             actionText: 'Settings',
             duration: 5000,
           });
@@ -217,9 +429,15 @@ export const PocketPoolProvider: React.FC<{ children: ReactNode }> = ({ children
   };
 
   const deleteTransaction = async (id: string): Promise<void> => {
-    const updated = transactions.filter((t) => t.id !== id);
-    setTransactions(updated);
-    await StorageService.saveTransactions(updated);
+    const targetTx = allTransactions.find((t) => t.id === id);
+    const updated = allTransactions.filter((t) => t.id !== id);
+    setAllTransactions(updated);
+
+    const budgetId = targetTx?.poolId || activePool.id;
+    await Promise.all([
+      FirebaseService.deleteTransaction(budgetId, id),
+      StorageService.saveTransactions(updated),
+    ]);
   };
 
   const addMember = async (
@@ -278,11 +496,16 @@ export const PocketPoolProvider: React.FC<{ children: ReactNode }> = ({ children
 
     const updated = [...members, newMember];
     setMembers(updated);
-    await StorageService.saveMembers(updated);
 
-    // If an initial deposit was specified, automatically record contribution
+    await Promise.all([
+      FirebaseService.saveMember(newMember),
+      StorageService.saveMembers(updated),
+    ]);
+
+    // If an initial deposit was specified, automatically record contribution into active pool
     if (initialDeposit && initialDeposit > 0) {
       await addTransaction({
+        poolId: activePool.id,
         type: 'contribution',
         amount: initialDeposit,
         memberId: newMember.id,
@@ -299,19 +522,29 @@ export const PocketPoolProvider: React.FC<{ children: ReactNode }> = ({ children
   const deleteMember = async (id: string): Promise<void> => {
     const updated = members.filter((m) => m.id !== id);
     setMembers(updated);
-    await StorageService.saveMembers(updated);
+    await Promise.all([
+      FirebaseService.deleteMember(id),
+      StorageService.saveMembers(updated),
+    ]);
   };
 
   const updateMember = async (id: string, updates: Partial<Member>): Promise<void> => {
     const updated = members.map((m) => (m.id === id ? { ...m, ...updates } : m));
     setMembers(updated);
+    const target = updated.find((m) => m.id === id);
+    if (target) {
+      await FirebaseService.saveMember(target);
+    }
     await StorageService.saveMembers(updated);
   };
 
   const updateSettings = async (newSettings: Partial<AppSettings>): Promise<void> => {
     const updated = { ...settings, ...newSettings };
     setSettings(updated);
-    await StorageService.saveSettings(updated);
+    await Promise.all([
+      FirebaseService.saveSettings(updated),
+      StorageService.saveSettings(updated),
+    ]);
   };
 
   const dismissAlert = async (id: string): Promise<void> => {
@@ -332,12 +565,14 @@ export const PocketPoolProvider: React.FC<{ children: ReactNode }> = ({ children
     specificTransactionId?: string
   ): Promise<{ success: boolean; filePath?: string; uri?: string }> => {
     try {
+      const poolName = activePool?.name || settings.groupName;
       if (format === 'csv') {
         const { filePath } = await exportToCSV(
           transactions,
           settings,
           timeframe,
-          specificTransactionId
+          specificTransactionId,
+          poolName
         );
         return { success: true, filePath };
       } else {
@@ -345,7 +580,8 @@ export const PocketPoolProvider: React.FC<{ children: ReactNode }> = ({ children
           transactions,
           settings,
           timeframe,
-          specificTransactionId
+          specificTransactionId,
+          poolName
         );
         return { success: true, uri };
       }
@@ -357,23 +593,28 @@ export const PocketPoolProvider: React.FC<{ children: ReactNode }> = ({ children
 
   const resetToDefaults = async (): Promise<void> => {
     await StorageService.resetToDefaults();
-    const [txs, mems, sets, alts] = await Promise.all([
-      StorageService.loadTransactions(),
-      StorageService.loadMembers(),
-      StorageService.loadSettings(),
-      StorageService.loadAlerts(),
-    ]);
-    setTransactions([...txs]);
-    setMembers([...mems]);
-    setSettings({ ...sets });
-    setAlerts([...alts]);
+    const data = await StorageService.initialize();
+    setPools(data.pools);
+    setActivePoolId(data.activePoolId);
+    setAllTransactions([...data.transactions]);
+    setMembers([...data.members]);
+    setSettings({ ...data.settings });
+    setAlerts([...data.alerts]);
+
+    // Reseed Firestore
+    data.pools.forEach((p) => FirebaseService.saveBudget(p));
+    data.members.forEach((m) => FirebaseService.saveMember(m));
+    data.transactions.forEach((tx) => FirebaseService.saveTransaction(tx.poolId || 'pool_summer_trip', tx));
   };
 
   const resetToZero = async (): Promise<void> => {
     await StorageService.resetToZero();
-    setTransactions([]);
+    const data = await StorageService.initialize();
+    setPools(data.pools);
+    setActivePoolId(data.activePoolId);
+    setAllTransactions([]);
     setMembers([]);
-    setSettings({ ...DEFAULT_SETTINGS });
+    setSettings({ ...DEFAULT_SETTINGS, activePoolId: data.activePoolId });
     setAlerts([]);
   };
 
@@ -385,10 +626,17 @@ export const PocketPoolProvider: React.FC<{ children: ReactNode }> = ({ children
     const success = await StorageService.importFullDatabaseJSON(json);
     if (success) {
       const data = await StorageService.initialize();
-      setTransactions(data.transactions);
+      setPools(data.pools);
+      setActivePoolId(data.activePoolId);
+      setAllTransactions(data.transactions);
       setMembers(data.members);
       setSettings(data.settings);
       setAlerts(data.alerts);
+
+      // Sync imported backup into Firestore
+      data.pools.forEach((p) => FirebaseService.saveBudget(p));
+      data.members.forEach((m) => FirebaseService.saveMember(m));
+      data.transactions.forEach((tx) => FirebaseService.saveTransaction(tx.poolId || 'pool_summer_trip', tx));
     }
     return success;
   };
@@ -398,6 +646,11 @@ export const PocketPoolProvider: React.FC<{ children: ReactNode }> = ({ children
       value={{
         isLoading,
         isLocked,
+        isCloudSyncActive,
+        pools,
+        activePoolId,
+        activePool,
+        allTransactions,
         transactions,
         members,
         settings,
@@ -409,6 +662,12 @@ export const PocketPoolProvider: React.FC<{ children: ReactNode }> = ({ children
         unreadAlertsCount,
         unlockApp,
         lockApp,
+        toggleCloudSync,
+        switchPool,
+        createPool,
+        deletePool,
+        renamePool,
+        updatePool,
         addTransaction,
         deleteTransaction,
         addMember,
