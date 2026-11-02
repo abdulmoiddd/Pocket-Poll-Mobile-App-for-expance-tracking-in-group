@@ -32,7 +32,7 @@ export const AddTransactionScreen: React.FC<AddTransactionScreenProps> = ({
   onSuccess,
   onCancel,
 }) => {
-  const { members, settings, addTransaction, addMember } = usePocketPool();
+  const { members, settings, activePool, addTransaction, addMember } = usePocketPool();
   const { toast } = useToast();
 
   const [type, setType] = useState<TransactionType>(initialType);
@@ -110,7 +110,7 @@ export const AddTransactionScreen: React.FC<AddTransactionScreenProps> = ({
         {/* Purple Gradient Header per requirements */}
         <Header
           title={type === 'expense' ? 'Record Expense' : 'Add Contribution'}
-          subtitle="Pool Financial Entry"
+          subtitle={`Pool: ${activePool.name}`}
           variant="purple"
           showLogo={false}
           rightAction={

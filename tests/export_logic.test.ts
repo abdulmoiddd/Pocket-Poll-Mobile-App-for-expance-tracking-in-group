@@ -115,7 +115,54 @@ export function runExportLogicTests(): boolean {
   assert(pdfHTML.includes('Net Balance'), 'PDF Invoice HTML includes Net Balance calculation');
   assert(pdfHTML.includes('€'), 'PDF Invoice HTML applies user-selected currency symbol (€)');
 
-  // Test 4: Single Transaction Receipt Invoice HTML
+  // Test 4: Enhanced PDF Export Formatting Requirements
+  assert(
+    pdfHTML.includes('data-asset="logo copy-01"') && pdfHTML.includes('id="pocketpool-logo-copy-01"'),
+    'PDF explicitly includes isolated transparent logo copy-01 at top header'
+  );
+  assert(
+    pdfHTML.includes('PocketPool Expense Report - Alpine Ski Trip 2026'),
+    'PDF explicitly includes clear document title dynamically reflecting the pool'
+  );
+
+  const customPoolPdfHTML = generateInvoiceHTML(
+    testTransactions,
+    mockSettings,
+    'all_time',
+    undefined,
+    refDate,
+    'Office Party'
+  );
+  assert(
+    customPoolPdfHTML.includes('PocketPool Expense Report - Office Party'),
+    'PDF document title reflects dynamic poolName parameter (Office Party)'
+  );
+
+  assert(
+    pdfHTML.includes('Total Budget') &&
+      pdfHTML.includes('Total Spent') &&
+      pdfHTML.includes('Remaining Balance'),
+    'PDF top summary section displays Total Budget, Total Spent, and Remaining Balance'
+  );
+
+  assert(
+    pdfHTML.includes('Breakdown of Spending by Category') &&
+      pdfHTML.includes('class="category-grid"') &&
+      pdfHTML.includes('Food') &&
+      pdfHTML.includes('Bills'),
+    'PDF explicitly includes breakdown of spending by category with percentages and amounts'
+  );
+
+  assert(
+    pdfHTML.includes('<th>Date</th>') &&
+      pdfHTML.includes('<th>Member</th>') &&
+      pdfHTML.includes('<th>Category</th>') &&
+      pdfHTML.includes('<th>Note</th>') &&
+      (pdfHTML.includes('<th class="text-right">Amount</th>') || pdfHTML.includes('Amount</th>')),
+    'PDF structured data table features Date, Member, Category, Note, and Amount columns'
+  );
+
+  // Test 5: Single Transaction Receipt Invoice HTML
   const singlePdfHTML = generateInvoiceHTML(testTransactions, mockSettings, 'single', 'tx_2');
   assert(singlePdfHTML.includes('Single Transaction Receipt'), 'Single receipt includes Single Transaction Receipt title');
   assert(singlePdfHTML.includes('320.00'), 'Single receipt includes exact transaction amount');

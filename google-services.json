@@ -1,0 +1,30 @@
+{
+  "project_info": {
+    "project_number": "190036364480",
+    "firebase_url": "https://pocket-pool-by-moid-default-rtdb.firebaseio.com",
+    "project_id": "pocket-pool-by-moid",
+    "storage_bucket": "pocket-pool-by-moid.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:190036364480:android:3a17cec463bc1b6b8e3125",
+        "android_client_info": {
+          "package_name": "com.pocketpool.app"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyARNVG3qYy5EG6YkLcbRKeTJjCH7OZ3Khg"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}

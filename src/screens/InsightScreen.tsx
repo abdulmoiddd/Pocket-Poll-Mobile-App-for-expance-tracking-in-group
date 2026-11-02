@@ -11,7 +11,7 @@ import { theme } from '../theme';
 import { getSpendingTrend, getCategorySummaries } from '../services/calculations';
 
 export const InsightScreen: React.FC = () => {
-  const { transactions, settings, memberSummaries, unreadAlertsCount, lockApp } = usePocketPool();
+  const { transactions, settings, activePool, memberSummaries, unreadAlertsCount, lockApp } = usePocketPool();
   const [selectedPeriod, setSelectedPeriod] = useState<InsightPeriod>('month');
 
   // Filter transactions according to selected period
@@ -55,7 +55,7 @@ export const InsightScreen: React.FC = () => {
         {/* White Header per requirements */}
         <Header
           title="Insights & Analytics"
-          subtitle="Spending breakdowns & pool distributions"
+          subtitle={`Breakdowns & distributions • ${activePool.name}`}
           variant="white"
           showLogo={true}
           unreadAlerts={unreadAlertsCount}

@@ -95,5 +95,194 @@ const memoryStore = new Map<string, string>();
     };
   }
 
+  if (request === 'firebase/app') {
+    return {
+      initializeApp: () => ({ name: '[DEFAULT]' }),
+      getApps: () => [{ name: '[DEFAULT]' }],
+      getApp: () => ({ name: '[DEFAULT]' }),
+    };
+  }
+
+  if (request === 'firebase/firestore') {
+    // In-memory Firestore with offline persistence simulation, queuing & real-time snapshot listeners
+    const collections = new Map<string, Map<string, any>>();
+    let isNetworkOnline = true;
+    let pendingWriteQueue: { colPath: string; docId: string; data: any }[] = [];
+    const listeners = new Set<{ path: string; isDoc: boolean; cb: (snap: any) => void }>();
+
+    function getColMap(path: string) {
+      if (!collections.has(path)) collections.set(path, new Map());
+      return collections.get(path)!;
+    }
+
+    function notifyListeners(path: string) {
+      for (const listener of listeners) {
+        if (listener.isDoc) {
+          const parts = listener.path.split('/');
+          const docId = parts.pop()!;
+          const colPath = parts.join('/');
+          if (colPath === path) {
+            const data = getColMap(colPath).get(docId);
+            listener.cb({
+              exists: () => !!data,
+              data: () => (data ? { ...data } : undefined),
+              id: docId,
+              metadata: { fromCache: !isNetworkOnline },
+            });
+          }
+        } else {
+          if (listener.path === path) {
+            const col = getColMap(path);
+            const docs = Array.from(col.entries()).map(([id, data]) => ({
+              id,
+              data: () => ({ ...data }),
+            }));
+            listener.cb({
+              docs,
+              forEach: (fn: any) => docs.forEach(fn),
+              metadata: { fromCache: !isNetworkOnline },
+            });
+          }
+        }
+      }
+    }
+
+    return {
+      __esModule: true,
+      getFirestore: () => ({ name: 'mock-firestore' }),
+      initializeFirestore: () => ({ name: 'mock-firestore' }),
+      persistentLocalCache: () => ({}),
+      memoryLocalCache: () => ({}),
+      collection: (first: any, ...segments: string[]) => {
+        let basePath = '';
+        if (first && first.path) {
+          basePath = first.path;
+        }
+        const rest = segments.filter(Boolean).join('/');
+        const fullPath = basePath ? `${basePath}/${rest}` : rest;
+        return { type: 'collection', path: fullPath };
+      },
+      doc: (first: any, ...segments: string[]) => {
+        let basePath = '';
+        if (first && first.path) {
+          basePath = first.path;
+        }
+        const rest = segments.filter(Boolean).join('/');
+        const fullPath = basePath ? `${basePath}/${rest}` : rest;
+        const parts = fullPath.split('/');
+        const docId = parts.pop()!;
+        const colPath = parts.join('/');
+        return { type: 'doc', id: docId, colPath, path: fullPath };
+      },
+      setDoc: async (docRef: any, data: any) => {
+        const col = getColMap(docRef.colPath);
+        col.set(docRef.id, { ...data });
+        if (!isNetworkOnline) {
+          pendingWriteQueue.push({ colPath: docRef.colPath, docId: docRef.id, data });
+        }
+        notifyListeners(docRef.colPath);
+      },
+      getDoc: async (docRef: any) => {
+        const col = getColMap(docRef.colPath);
+        const data = col.get(docRef.id);
+        return {
+          exists: () => !!data,
+          data: () => (data ? { ...data } : undefined),
+          id: docRef.id,
+          metadata: { fromCache: !isNetworkOnline },
+        };
+      },
+      getDocs: async (queryOrCol: any) => {
+        const path = queryOrCol.path || queryOrCol.col?.path || '';
+        const col = getColMap(path);
+        let items = Array.from(col.entries()).map(([id, data]) => ({
+          id,
+          data: () => ({ ...data }),
+        }));
+        if (queryOrCol.orderByField) {
+          const field = queryOrCol.orderByField;
+          const dir = queryOrCol.orderDir === 'desc' ? -1 : 1;
+          items.sort((a, b) => {
+            const va = a.data()[field] ?? 0;
+            const vb = b.data()[field] ?? 0;
+            return va > vb ? dir : va < vb ? -dir : 0;
+          });
+        }
+        return {
+          docs: items,
+          forEach: (fn: any) => items.forEach(fn),
+          metadata: { fromCache: !isNetworkOnline },
+        };
+      },
+      deleteDoc: async (docRef: any) => {
+        const col = getColMap(docRef.colPath);
+        col.delete(docRef.id);
+        notifyListeners(docRef.colPath);
+      },
+      onSnapshot: (queryOrDoc: any, next: (snap: any) => void) => {
+        const isDoc = queryOrDoc.type === 'doc';
+        const path = isDoc ? queryOrDoc.path : (queryOrDoc.path || queryOrDoc.col?.path || '');
+        const listenerObj = { path, isDoc, cb: next };
+        listeners.add(listenerObj);
+
+        // Immediate snapshot dispatch
+        if (isDoc) {
+          const col = getColMap(queryOrDoc.colPath);
+          const data = col.get(queryOrDoc.id);
+          next({
+            exists: () => !!data,
+            data: () => (data ? { ...data } : undefined),
+            id: queryOrDoc.id,
+            metadata: { fromCache: !isNetworkOnline },
+          });
+        } else {
+          const col = getColMap(path);
+          const docs = Array.from(col.entries()).map(([id, data]) => ({
+            id,
+            data: () => ({ ...data }),
+          }));
+          next({
+            docs,
+            forEach: (fn: any) => docs.forEach(fn),
+            metadata: { fromCache: !isNetworkOnline },
+          });
+        }
+
+        return () => {
+          listeners.delete(listenerObj);
+        };
+      },
+      query: (col: any, ...constraints: any[]) => {
+        let orderByField: string | undefined;
+        let orderDir: string = 'asc';
+        for (const c of constraints) {
+          if (c && c.type === 'orderBy') {
+            orderByField = c.field;
+            orderDir = c.dir || 'asc';
+          }
+        }
+        return { col, path: col.path, orderByField, orderDir };
+      },
+      orderBy: (field: string, dir: string = 'asc') => ({ type: 'orderBy', field, dir }),
+      enableNetwork: async () => {
+        isNetworkOnline = true;
+        const toFlush = [...pendingWriteQueue];
+        pendingWriteQueue = [];
+        for (const w of toFlush) {
+          notifyListeners(w.colPath);
+        }
+      },
+      disableNetwork: async () => {
+        isNetworkOnline = false;
+      },
+      waitForPendingWrites: async () => {
+        pendingWriteQueue = [];
+      },
+      terminate: async () => {
+        listeners.clear();
+      },
+    };
+  }
+
   return originalLoad.apply(this, arguments);
 };
