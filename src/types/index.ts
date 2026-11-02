@@ -27,8 +27,17 @@ export interface Member {
   joinedAt: string;
 }
 
+export interface BudgetPool {
+  id: string;
+  name: string;
+  description?: string;
+  createdAt: number;
+  thresholdAmount?: number;
+}
+
 export interface Transaction {
   id: string;
+  poolId?: string;             // ID of the associated budget pool
   type: TransactionType;
   amount: number;
   memberId: string;
@@ -63,6 +72,7 @@ export interface AppSettings {
   biometricEnabled: boolean;   // Biometric auth on app launch
   pinCode: string;             // 4-digit PIN fallback
   groupName: string;           // e.g., 'PocketPool Family & Friends'
+  activePoolId?: string;       // ID of the currently active budget pool
   isFirstLaunch: boolean;
 }
 

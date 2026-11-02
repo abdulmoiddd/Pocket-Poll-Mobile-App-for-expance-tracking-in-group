@@ -14,6 +14,7 @@ import * as ImagePicker from 'expo-image-picker';
 import { usePocketPool } from '../context/PocketPoolContext';
 import { useToast } from '../context/ToastContext';
 import { Header } from '../components/common/Header';
+import { BudgetPoolSelector } from '../components/dashboard/BudgetPoolSelector';
 import { HeroMetric } from '../components/dashboard/HeroMetric';
 import { StatsRow } from '../components/dashboard/StatsRow';
 import { SpendingTrendChart } from '../components/dashboard/SpendingTrendChart';
@@ -64,6 +65,7 @@ export const DashboardScreen: React.FC<DashboardScreenProps> = ({
     categorySummaries,
     spendingTrend,
     unreadAlertsCount,
+    activePool,
     markAlertsAsRead,
     dismissAlert,
     lockApp,
@@ -137,9 +139,9 @@ export const DashboardScreen: React.FC<DashboardScreenProps> = ({
         showsVerticalScrollIndicator={false}
         contentContainerStyle={styles.scrollContent}
       >
-        {/* Purple Gradient Header */}
+        {/* Purple Gradient Header with Multi-Budget Context Switching */}
         <Header
-          subtitle={settings.groupName}
+          subtitle={`Pool: ${activePool.name}`}
           showLogo={true}
           unreadAlerts={unreadAlertsCount}
           onAlertPress={() => {
@@ -160,7 +162,9 @@ export const DashboardScreen: React.FC<DashboardScreenProps> = ({
               </Text>
             </TouchableOpacity>
           }
-        />
+        >
+          <BudgetPoolSelector />
+        </Header>
 
         {/* Hero Metric Card overlapping header */}
         <HeroMetric
