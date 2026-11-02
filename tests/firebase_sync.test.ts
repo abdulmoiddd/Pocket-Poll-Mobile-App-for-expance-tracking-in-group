@@ -17,16 +17,15 @@ export async function runFirebaseSyncTests(): Promise<boolean> {
   assertionsPassed++;
   console.log('  ✅ PASS: Firestore instance successfully initialized with local cache');
 
-  assert(FirebaseService.isSyncEnabled() === true, 'Cloud sync is active by default');
+  assert(FirebaseService.isSyncEnabled() === false, 'Cloud sync is disabled by default upon installation');
   assertionsPassed++;
-  console.log('  ✅ PASS: Cloud sync is active by default upon initialization');
+  console.log('  ✅ PASS: Cloud sync is disabled by default upon installation (offline-first)');
 
   // 2. Offline Mode & Local Persistence Verification
-  console.log('  📡 Simulating Network Disconnect (Offline Mode)...');
-  await FirebaseService.disableCloudSync();
-  assert(FirebaseService.isSyncEnabled() === false, 'Cloud sync state successfully switched to offline');
+  console.log('  📡 Simulating Offline Persistence & Local Cache Mode...');
+  assert(FirebaseService.isSyncEnabled() === false, 'Cloud sync state is offline');
   assertionsPassed++;
-  console.log('  ✅ PASS: Firestore network disabled; offline persistence layer active');
+  console.log('  ✅ PASS: Cloud sync disabled; offline persistence layer active');
 
   // 3. Budgets Collection Schema Mapping (Offline write queued to local cache)
   const testBudget1: BudgetPool = {

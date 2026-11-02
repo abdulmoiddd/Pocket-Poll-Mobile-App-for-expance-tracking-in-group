@@ -154,6 +154,18 @@ export async function runLocalStorageTests(): Promise<boolean> {
   assert(zeroMembers.length === 0, 'Storage resetToZero clears all members to 0');
   assert(zeroPools.length === 1, 'Storage resetToZero initializes exactly 1 fresh default pool');
 
+  // Verify deleting the last member preserves 0 members without dummy re-seed
+  let currentMembers = await StorageService.loadMembers();
+  while (currentMembers.length > 0) {
+    currentMembers.pop();
+    await StorageService.saveMembers(currentMembers);
+  }
+  const emptyMembersCheck = await StorageService.loadMembers();
+  assert(emptyMembersCheck.length === 0, 'Deleting the last member leaves 0 members without restoring dummy members');
+  passed++;
+  total++;
+  console.log('  ✅ PASS: Deleting the last member leaves 0 members and never restores dummy data');
+
   // Clean up: Reset back to demo defaults
   await StorageService.resetToDefaults();
   const resetTxs = await StorageService.loadTransactions();

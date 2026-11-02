@@ -14,8 +14,8 @@ export const FIREBASE_CONFIG = {
   appId: '1:190036364480:android:3a17cec463bc1b6b8e3125',
 };
 
-// Cloud sync network flag
-let isCloudSyncActive = true;
+// Cloud sync network flag - default OFF upon app install per requirements
+let isCloudSyncActive = false;
 
 // Active subscription listeners
 type Listener<T> = (data: T, isFromCache: boolean) => void;
@@ -210,9 +210,6 @@ export const FirebaseService = {
     } else {
       pendingQueue.push({ type: 'save_budget', budgetId: budget.id, payload });
     }
-
-    const allBudgets = Array.from(localCache.budgets.values());
-    budgetListeners.forEach((fn) => fn(allBudgets, !isCloudSyncActive));
   },
 
   async deleteBudget(budgetId: string): Promise<void> {
@@ -225,9 +222,6 @@ export const FirebaseService = {
     } else {
       pendingQueue.push({ type: 'delete_budget', budgetId });
     }
-
-    const allBudgets = Array.from(localCache.budgets.values());
-    budgetListeners.forEach((fn) => fn(allBudgets, !isCloudSyncActive));
   },
 
   subscribeToBudgets(
@@ -301,12 +295,6 @@ export const FirebaseService = {
     } else {
       pendingQueue.push({ type: 'save_tx', budgetId, txId: transaction.id, payload });
     }
-
-    const listeners = transactionListeners.get(budgetId);
-    if (listeners) {
-      const allTxs = Array.from(poolTxMap.values());
-      listeners.forEach((fn) => fn(allTxs, !isCloudSyncActive));
-    }
   },
 
   async deleteTransaction(budgetId: string, transactionId: string): Promise<void> {
@@ -319,12 +307,6 @@ export const FirebaseService = {
       firebaseFetch(`transactions/${budgetId}/${transactionId}`, { method: 'DELETE' });
     } else {
       pendingQueue.push({ type: 'delete_tx', budgetId, txId: transactionId });
-    }
-
-    const listeners = transactionListeners.get(budgetId);
-    if (listeners && poolTxMap) {
-      const allTxs = Array.from(poolTxMap.values());
-      listeners.forEach((fn) => fn(allTxs, !isCloudSyncActive));
     }
   },
 
@@ -403,9 +385,6 @@ export const FirebaseService = {
     } else {
       pendingQueue.push({ type: 'save_member', memberId: member.id, payload });
     }
-
-    const allMembers = Array.from(localCache.members.values());
-    memberListeners.forEach((fn) => fn(allMembers, !isCloudSyncActive));
   },
 
   async deleteMember(memberId: string): Promise<void> {
@@ -416,9 +395,6 @@ export const FirebaseService = {
     } else {
       pendingQueue.push({ type: 'delete_member', memberId });
     }
-
-    const allMembers = Array.from(localCache.members.values());
-    memberListeners.forEach((fn) => fn(allMembers, !isCloudSyncActive));
   },
 
   subscribeToMembers(

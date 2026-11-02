@@ -102,7 +102,8 @@ export const PocketPoolProvider: React.FC<{ children: ReactNode }> = ({ children
 
   const [isLoading, setIsLoading] = useState(true);
   const [isLocked, setIsLocked] = useState(false);
-  const [isCloudSyncActive, setIsCloudSyncActive] = useState(true);
+  // Default cloud sync toggle OFF upon installation per requirements
+  const [isCloudSyncActive, setIsCloudSyncActive] = useState(false);
   const [pools, setPools] = useState<BudgetPool[]>(INITIAL_POOLS);
   const [activePoolId, setActivePoolId] = useState<string>(INITIAL_POOLS[0].id);
   const [allTransactions, setAllTransactions] = useState<Transaction[]>([]);
@@ -134,26 +135,21 @@ export const PocketPoolProvider: React.FC<{ children: ReactNode }> = ({ children
     loadData();
   }, []);
 
-  // 2. Set up Firestore Real-time Listeners (Budgets, Members, Settings)
+  // 2. Set up Firebase Real-time Listeners (Budgets, Members, Settings)
   useEffect(() => {
-    // Real-time listener for budgets collection
+    // Real-time listener for budgets
     const unsubBudgets = FirebaseService.subscribeToBudgets((cloudBudgets) => {
       if (cloudBudgets.length > 0) {
         setPools(cloudBudgets);
         StorageService.savePools(cloudBudgets);
-      } else if (!isLoading && pools.length > 0) {
-        // First sync to fresh Firestore: seed initial pools to cloud
-        pools.forEach((p) => FirebaseService.saveBudget(p));
       }
     });
 
-    // Real-time listener for members collection
+    // Real-time listener for members
     const unsubMembers = FirebaseService.subscribeToMembers((cloudMembers) => {
       if (cloudMembers.length > 0) {
         setMembers(cloudMembers);
         StorageService.saveMembers(cloudMembers);
-      } else if (!isLoading && members.length > 0) {
-        members.forEach((m) => FirebaseService.saveMember(m));
       }
     });
 
@@ -172,27 +168,26 @@ export const PocketPoolProvider: React.FC<{ children: ReactNode }> = ({ children
     };
   }, [isLoading]);
 
-  // 3. Set up Firestore Real-time Listener for Active Budget's Sub-collection Transactions
+  // 3. Set up Firebase Real-time Listener for Active Budget's Transactions (Merged by ID to prevent data loss)
   useEffect(() => {
     if (!activePoolId) return;
 
     const unsubTxs = FirebaseService.subscribeToTransactions(activePoolId, (cloudTxs) => {
       if (cloudTxs.length > 0) {
         setAllTransactions((prev) => {
-          // Replace or merge transactions for this pool
-          const otherPoolsTxs = prev.filter((tx) => (tx.poolId || prev[0]?.poolId) !== activePoolId);
-          const updated = [...cloudTxs, ...otherPoolsTxs];
-          StorageService.saveTransactions(updated);
-          return updated;
+          // Merge cloud transactions by ID so that existing local contributions / offline transactions are NEVER erased!
+          const txMap = new Map<string, Transaction>();
+          for (const tx of prev) {
+            txMap.set(tx.id, tx);
+          }
+          for (const tx of cloudTxs) {
+            txMap.set(tx.id, tx);
+          }
+          const merged = Array.from(txMap.values());
+          merged.sort((a, b) => (b.createdAt || 0) - (a.createdAt || 0));
+          StorageService.saveTransactions(merged);
+          return merged;
         });
-      } else if (!isLoading) {
-        // If local has transactions for this pool not yet in Firestore, queue them to Firestore
-        const localTxs = allTransactions.filter(
-          (tx) => (tx.poolId || pools[0]?.id) === activePoolId
-        );
-        if (localTxs.length > 0) {
-          localTxs.forEach((tx) => FirebaseService.saveTransaction(activePoolId, tx));
-        }
       }
     });
 
@@ -256,17 +251,27 @@ export const PocketPoolProvider: React.FC<{ children: ReactNode }> = ({ children
   };
 
   /**
-   * Toggle between Cloud Sync enabled and pure local offline cache mode
+   * Toggle between Cloud Sync enabled and pure local offline cache mode.
+   * When turned ON, automatically uploads all mobile data to Firebase.
    */
   const toggleCloudSync = async () => {
     if (isCloudSyncActive) {
       await FirebaseService.disableCloudSync();
       setIsCloudSyncActive(false);
-      toastApi?.info('Offline Mode Active', 'Operating entirely from local Firestore cache.');
+      toastApi?.info('Offline Mode Active', 'Operating entirely from local storage.');
     } else {
       await FirebaseService.enableCloudSync();
       setIsCloudSyncActive(true);
-      toastApi?.success('Cloud Sync Restored', 'Synchronizing with Firebase Cloud backend.');
+      toastApi?.info('Sync Enabled', 'Uploading mobile data to Firebase...');
+      try {
+        const stats = await uploadLocalDataToCloud();
+        toastApi?.success(
+          'Firebase Cloud Sync Active',
+          `Synced ${stats.poolsCount} pools, ${stats.txCount} transactions, and ${stats.membersCount} members to Firebase.`
+        );
+      } catch (err: any) {
+        toastApi?.warning('Sync Enabled', 'Local changes will sync to Firebase in background.');
+      }
     }
   };
 

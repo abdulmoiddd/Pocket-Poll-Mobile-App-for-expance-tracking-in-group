@@ -432,10 +432,14 @@ export const StorageService = {
   async loadMembers(): Promise<Member[]> {
     try {
       const data = await getStorageItem(STORAGE_KEYS.MEMBERS);
-      if (!data) return INITIAL_MEMBERS;
-      return JSON.parse(data) as Member[];
+      if (data === null || data === undefined) {
+        const initialized = await getStorageItem(STORAGE_KEYS.INITIALIZED);
+        return initialized ? [] : INITIAL_MEMBERS;
+      }
+      const parsed = JSON.parse(data);
+      return Array.isArray(parsed) ? (parsed as Member[]) : [];
     } catch {
-      return INITIAL_MEMBERS;
+      return [];
     }
   },
 
