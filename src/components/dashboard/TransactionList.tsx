@@ -95,17 +95,21 @@ export const TransactionList: React.FC<TransactionListProps> = ({
                 </View>
 
                 <View style={styles.centerCol}>
-                  <Text style={styles.txTitle} numberOfLines={1}>
+                  <Text style={styles.txTitle} numberOfLines={1} ellipsizeMode="tail">
                     {tx.notes || (isContribution ? 'Contribution' : tx.category || 'Expense')}
                   </Text>
                   <View style={styles.metaRow}>
-                    <Text style={styles.metaText}>{tx.memberName}</Text>
+                    <Text style={styles.metaText} numberOfLines={1} ellipsizeMode="tail">
+                      {tx.memberName}
+                    </Text>
                     <Text style={styles.metaDot}>&bull;</Text>
-                    <Text style={styles.metaText}>{tx.date}</Text>
+                    <Text style={styles.metaDate} numberOfLines={1}>{tx.date}</Text>
                     {tx.receiptName && (
                       <>
                         <Text style={styles.metaDot}>&bull;</Text>
-                        <Text style={styles.receiptIndicator}>📎 Receipt</Text>
+                        <Text style={styles.receiptIndicator} numberOfLines={1} ellipsizeMode="tail">
+                          📎 Receipt
+                        </Text>
                       </>
                     )}
                   </View>
@@ -117,11 +121,15 @@ export const TransactionList: React.FC<TransactionListProps> = ({
                       styles.amountText,
                       { color: isContribution ? '#059669' : '#1F2937' },
                     ]}
+                    numberOfLines={1}
+                    ellipsizeMode="tail"
                   >
                     {isContribution ? '+' : '-'}
                     {formatCurrency(tx.amount, currencySymbol)}
                   </Text>
-                  <Text style={styles.paymentMethodText}>{tx.paymentMethod}</Text>
+                  <Text style={styles.paymentMethodText} numberOfLines={1} ellipsizeMode="tail">
+                    {tx.paymentMethod}
+                  </Text>
                 </View>
               </TouchableOpacity>
             );
@@ -198,22 +206,35 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     gap: 4,
+    flexWrap: 'nowrap',
+    overflow: 'hidden',
   },
   metaText: {
     fontSize: 12,
     color: theme.colors.textMuted,
+    flexShrink: 1,
+    maxWidth: 110,
+  },
+  metaDate: {
+    fontSize: 12,
+    color: theme.colors.textMuted,
+    flexShrink: 0,
   },
   metaDot: {
     fontSize: 12,
     color: theme.colors.textMuted,
+    flexShrink: 0,
   },
   receiptIndicator: {
     fontSize: 11,
     color: theme.colors.primary,
     fontWeight: '500',
+    flexShrink: 1,
   },
   amountCol: {
     alignItems: 'flex-end',
+    flexShrink: 0,
+    minWidth: 70,
   },
   amountText: {
     fontSize: 15,

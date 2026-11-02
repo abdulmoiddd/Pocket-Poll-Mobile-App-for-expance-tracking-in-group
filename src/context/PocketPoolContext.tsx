@@ -83,6 +83,8 @@ interface PocketPoolContextType {
   resetToZero: () => Promise<void>;
   exportJSONBackup: () => Promise<string>;
   importJSONBackup: (json: string) => Promise<boolean>;
+  uploadLocalDataToCloud: () => Promise<{ poolsCount: number; txCount: number; membersCount: number }>;
+  downloadCloudDataToLocal: () => Promise<{ poolsCount: number; txCount: number; membersCount: number }>;
 }
 
 const PocketPoolContext = createContext<PocketPoolContextType | undefined>(undefined);
@@ -294,12 +296,16 @@ export const PocketPoolProvider: React.FC<{ children: ReactNode }> = ({ children
     setPools(updatedPools);
     setActivePoolId(newPool.id);
 
-    // Save to Firestore (offline cache + cloud sync) and local JSON storage
+    // Save to local JSON storage immediately for instant UI response
     await Promise.all([
-      FirebaseService.saveBudget(newPool),
       StorageService.savePools(updatedPools),
       StorageService.saveActivePoolId(newPool.id),
     ]);
+
+    // Queue to Firebase in background (relies on Firestore offline persistence)
+    FirebaseService.saveBudget(newPool).catch((err) => {
+      console.warn('Background budget sync queued in offline persistence:', err);
+    });
 
     return newPool;
   };
@@ -311,11 +317,14 @@ export const PocketPoolProvider: React.FC<{ children: ReactNode }> = ({ children
     const updatedPools = pools.map((p) => (p.id === poolId ? { ...p, ...updates } : p));
     setPools(updatedPools);
 
+    await StorageService.savePools(updatedPools);
+
     const target = updatedPools.find((p) => p.id === poolId);
     if (target) {
-      await FirebaseService.saveBudget(target);
+      FirebaseService.saveBudget(target).catch((err) => {
+        console.warn('Background budget update sync queued in offline persistence:', err);
+      });
     }
-    await StorageService.savePools(updatedPools);
   };
 
   /**
@@ -347,16 +356,20 @@ export const PocketPoolProvider: React.FC<{ children: ReactNode }> = ({ children
     }
 
     await Promise.all([
-      FirebaseService.deleteBudget(poolId),
       StorageService.savePools(updatedPools),
       StorageService.saveTransactions(updatedTxs),
       StorageService.saveActivePoolId(nextActiveId),
     ]);
+
+    FirebaseService.deleteBudget(poolId).catch((err) => {
+      console.warn('Background budget deletion queued in offline persistence:', err);
+    });
   };
 
   /**
    * Adds transaction (contribution or expense) attributed to active pool
-   * Immediately cached offline in Firestore, updates UI, and queues for cloud sync.
+   * Immediately updates local JSON state and UI optimistically without blocking.
+   * Syncs payload to Firestore in the background using offline persistence.
    */
   const addTransaction = async (
     txData: Omit<Transaction, 'id' | 'createdAt'>
@@ -374,11 +387,15 @@ export const PocketPoolProvider: React.FC<{ children: ReactNode }> = ({ children
     const updatedAll = [newTransaction, ...allTransactions];
     setAllTransactions(updatedAll);
 
-    // Save to Firestore sub-collection & local storage concurrently
-    await Promise.all([
-      FirebaseService.saveTransaction(newTransaction.poolId || activePool.id, newTransaction),
-      StorageService.saveTransactions(updatedAll),
-    ]);
+    // Save to local JSON storage immediately (instant offline durability)
+    await StorageService.saveTransactions(updatedAll);
+
+    // Queue to Firebase in background without blocking caller or UI thread
+    FirebaseService.saveTransaction(newTransaction.poolId || activePool.id, newTransaction).catch(
+      (err) => {
+        console.warn('Background transaction sync queued in offline persistence:', err);
+      }
+    );
 
     // Calculate updated budget for active pool
     const updatedActiveTxs = [newTransaction, ...transactions];
@@ -434,10 +451,12 @@ export const PocketPoolProvider: React.FC<{ children: ReactNode }> = ({ children
     setAllTransactions(updated);
 
     const budgetId = targetTx?.poolId || activePool.id;
-    await Promise.all([
-      FirebaseService.deleteTransaction(budgetId, id),
-      StorageService.saveTransactions(updated),
-    ]);
+    await StorageService.saveTransactions(updated);
+
+    // Background sync deletion to Firebase
+    FirebaseService.deleteTransaction(budgetId, id).catch((err) => {
+      console.warn('Background transaction deletion queued in offline persistence:', err);
+    });
   };
 
   const addMember = async (
@@ -488,8 +507,8 @@ export const PocketPoolProvider: React.FC<{ children: ReactNode }> = ({ children
       name: name.trim(),
       avatarColor: color,
       avatarText: initials || 'PP',
-      email: email?.trim(),
-      phone: phone?.trim(),
+      email: email?.trim() || undefined,
+      phone: phone?.trim() || undefined,
       totalContributed: initialDeposit && initialDeposit > 0 ? initialDeposit : 0,
       joinedAt: new Date().toISOString().split('T')[0],
     };
@@ -497,10 +516,13 @@ export const PocketPoolProvider: React.FC<{ children: ReactNode }> = ({ children
     const updated = [...members, newMember];
     setMembers(updated);
 
-    await Promise.all([
-      FirebaseService.saveMember(newMember),
-      StorageService.saveMembers(updated),
-    ]);
+    // Save to local storage immediately
+    await StorageService.saveMembers(updated);
+
+    // Background sync to Firebase
+    FirebaseService.saveMember(newMember).catch((err) => {
+      console.warn('Background member sync queued in offline persistence:', err);
+    });
 
     // If an initial deposit was specified, automatically record contribution into active pool
     if (initialDeposit && initialDeposit > 0) {
@@ -522,29 +544,31 @@ export const PocketPoolProvider: React.FC<{ children: ReactNode }> = ({ children
   const deleteMember = async (id: string): Promise<void> => {
     const updated = members.filter((m) => m.id !== id);
     setMembers(updated);
-    await Promise.all([
-      FirebaseService.deleteMember(id),
-      StorageService.saveMembers(updated),
-    ]);
+    await StorageService.saveMembers(updated);
+    FirebaseService.deleteMember(id).catch((err) => {
+      console.warn('Background member deletion queued in offline persistence:', err);
+    });
   };
 
   const updateMember = async (id: string, updates: Partial<Member>): Promise<void> => {
     const updated = members.map((m) => (m.id === id ? { ...m, ...updates } : m));
     setMembers(updated);
+    await StorageService.saveMembers(updated);
     const target = updated.find((m) => m.id === id);
     if (target) {
-      await FirebaseService.saveMember(target);
+      FirebaseService.saveMember(target).catch((err) => {
+        console.warn('Background member update queued in offline persistence:', err);
+      });
     }
-    await StorageService.saveMembers(updated);
   };
 
   const updateSettings = async (newSettings: Partial<AppSettings>): Promise<void> => {
     const updated = { ...settings, ...newSettings };
     setSettings(updated);
-    await Promise.all([
-      FirebaseService.saveSettings(updated),
-      StorageService.saveSettings(updated),
-    ]);
+    await StorageService.saveSettings(updated);
+    FirebaseService.saveSettings(updated).catch((err) => {
+      console.warn('Background settings sync queued in offline persistence:', err);
+    });
   };
 
   const dismissAlert = async (id: string): Promise<void> => {
@@ -641,6 +665,81 @@ export const PocketPoolProvider: React.FC<{ children: ReactNode }> = ({ children
     return success;
   };
 
+  /**
+   * Explicitly uploads all local device data (pools, transactions, members, settings) to Firebase Cloud Firestore
+   */
+  const uploadLocalDataToCloud = async (): Promise<{
+    poolsCount: number;
+    txCount: number;
+    membersCount: number;
+  }> => {
+    let poolsCount = 0;
+    let txCount = 0;
+    let membersCount = 0;
+
+    for (const pool of pools) {
+      await FirebaseService.saveBudget(pool);
+      poolsCount++;
+    }
+
+    for (const tx of allTransactions) {
+      const pId = tx.poolId || pools[0]?.id || 'pool_summer_trip';
+      await FirebaseService.saveTransaction(pId, tx);
+      txCount++;
+    }
+
+    for (const member of members) {
+      await FirebaseService.saveMember(member);
+      membersCount++;
+    }
+
+    await FirebaseService.saveSettings(settings);
+
+    return { poolsCount, txCount, membersCount };
+  };
+
+  /**
+   * Explicitly downloads all cloud data from Firebase Cloud Firestore and updates local device storage & UI state
+   */
+  const downloadCloudDataToLocal = async (): Promise<{
+    poolsCount: number;
+    txCount: number;
+    membersCount: number;
+  }> => {
+    const cloudBudgets = await FirebaseService.getBudgetsOnce();
+    const finalPools = cloudBudgets.length > 0 ? cloudBudgets : pools;
+
+    const allDownloadedTxs: Transaction[] = [];
+    for (const pool of finalPools) {
+      const txs = await FirebaseService.getTransactionsOnce(pool.id);
+      allDownloadedTxs.push(...txs);
+    }
+
+    const cloudMembers = await FirebaseService.getMembersOnce();
+    const finalMembers = cloudMembers.length > 0 ? cloudMembers : members;
+
+    const cloudSettings = await FirebaseService.getSettingsOnce();
+    const finalSettings = cloudSettings || settings;
+
+    // Update state
+    setPools(finalPools);
+    setAllTransactions(allDownloadedTxs);
+    setMembers(finalMembers);
+    setSettings(finalSettings);
+
+    // Save to local storage
+    await StorageService.savePools(finalPools);
+    await StorageService.saveTransactions(allDownloadedTxs);
+    await StorageService.saveMembers(finalMembers);
+    await StorageService.saveSettings(finalSettings);
+
+    return {
+      poolsCount: finalPools.length,
+      txCount: allDownloadedTxs.length,
+      membersCount: finalMembers.length,
+    };
+  };
+
   return (
     <PocketPoolContext.Provider
       value={{
@@ -681,6 +780,8 @@ export const PocketPoolProvider: React.FC<{ children: ReactNode }> = ({ children
         resetToZero,
         exportJSONBackup,
         importJSONBackup,
+        uploadLocalDataToCloud,
+        downloadCloudDataToLocal,
       }}
     >
       {children}

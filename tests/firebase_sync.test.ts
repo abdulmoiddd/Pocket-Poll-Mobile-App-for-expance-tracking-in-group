@@ -1,4 +1,5 @@
-import { FirebaseService } from '../src/services/firebase';
+import { FirebaseService, sanitizeFirestorePayload } from '../src/services/firebase';
+import { PocketPoolApi } from '../src/services/api';
 import { BudgetPool, Transaction, Member, AppSettings } from '../types';
 
 function assert(condition: boolean, message: string) {
@@ -177,7 +178,7 @@ export async function runFirebaseSyncTests(): Promise<boolean> {
   // Switch to offline for deterministic local validation
   await FirebaseService.disableCloudSync();
 
-  // 8. Members & Settings Persistence
+  // 8. Members & Settings Persistence & Payload Sanitization (Undefined Strip)
   const testMember: Member = {
     id: 'm_test_cloud',
     name: 'Jordan Cloud',
@@ -189,6 +190,55 @@ export async function runFirebaseSyncTests(): Promise<boolean> {
   assert(fetchedMembers.some((m) => m.id === 'm_test_cloud'), 'Member saved and fetched from members collection');
   assertionsPassed++;
   console.log('  ✅ PASS: Member entity synchronized to Firebase members collection');
+
+  // Bug Fix Test: Add member with empty optional fields (phone, email undefined or empty strings)
+  const memberWithEmptyFields: Member = {
+    id: 'm_test_empty_fields',
+    name: 'Alex EmptyFields',
+    email: undefined, // Empty optional field
+    phone: '',        // Empty string optional field
+    totalContributed: 0,
+    joinedAt: Date.now(),
+  };
+
+  // Must execute without crashing or throwing "Unsupported field value: undefined"
+  let memberSavedWithoutCrash = false;
+  try {
+    await FirebaseService.saveMember(memberWithEmptyFields);
+    memberSavedWithoutCrash = true;
+  } catch (err: any) {
+    throw new Error(`setDoc crashed on undefined optional fields: ${err?.message}`);
+  }
+  assert(memberSavedWithoutCrash === true, 'Member with empty optional fields saved successfully without setDoc crash');
+  assertionsPassed++;
+
+  const fetchedEmptyMember = (await FirebaseService.getMembersOnce()).find((m) => m.id === 'm_test_empty_fields');
+  assert(!!fetchedEmptyMember, 'Member with empty fields retrieved from Firestore collection');
+  assertionsPassed++;
+  assert(fetchedEmptyMember?.email === null, 'Undefined email safely sanitized to null');
+  assertionsPassed++;
+  assert(fetchedEmptyMember?.phone === null, 'Empty phone safely sanitized to null');
+  assertionsPassed++;
+  console.log('  ✅ PASS: Payload sanitization stripped undefined fields and converted empty inputs to null');
+
+  // Direct Unit Test of sanitizeFirestorePayload
+  const rawPayload = {
+    validKey: 'hello',
+    numKey: 42,
+    emptyField: undefined,
+    nested: {
+      innerValid: true,
+      innerUndefined: undefined,
+    },
+  };
+  const sanitized = sanitizeFirestorePayload(rawPayload);
+  assert(sanitized.validKey === 'hello', 'sanitized validKey preserved');
+  assertionsPassed++;
+  assert(!('emptyField' in sanitized), 'undefined field completely stripped from sanitized payload');
+  assertionsPassed++;
+  assert(!('innerUndefined' in sanitized.nested), 'nested undefined field completely stripped');
+  assertionsPassed++;
+  console.log('  ✅ PASS: sanitizeFirestorePayload utility recursively strips undefined properties');
 
   const testSettings: AppSettings = {
     currencySymbol: '$',
@@ -205,10 +255,27 @@ export async function runFirebaseSyncTests(): Promise<boolean> {
   assertionsPassed++;
   console.log('  ✅ PASS: App settings synchronized to Firebase settings/app_settings document');
 
+  // 7. Test Mobile-to-Cloud Upload & Cloud-to-Mobile Download via PocketPool Unified API
+  console.log('  📲 Testing PocketPoolApi Upload & Download Synchronization...');
+  const uploadStats = await PocketPoolApi.uploadLocalDataToCloud();
+  assert(uploadStats.poolsCount > 0, 'uploadLocalDataToCloud uploaded budget pools to Firebase');
+  assertionsPassed++;
+  assert(uploadStats.membersCount > 0, 'uploadLocalDataToCloud uploaded members to Firebase');
+  assertionsPassed++;
+  console.log(`  ✅ PASS: Uploaded ${uploadStats.poolsCount} pools, ${uploadStats.txCount} txs, ${uploadStats.membersCount} members to Firebase`);
+
+  const downloadStats = await PocketPoolApi.downloadCloudDataToLocal();
+  assert(downloadStats.poolsCount >= uploadStats.poolsCount, 'downloadCloudDataToLocal fetched cloud budget pools');
+  assertionsPassed++;
+  assert(downloadStats.membersCount >= uploadStats.membersCount, 'downloadCloudDataToLocal fetched cloud members');
+  assertionsPassed++;
+  console.log(`  ✅ PASS: Downloaded ${downloadStats.poolsCount} pools, ${downloadStats.txCount} txs, ${downloadStats.membersCount} members from Firebase`);
+
   // Clean up test documents
   await FirebaseService.deleteBudget(testBudget1.id);
   await FirebaseService.deleteBudget(testBudget2.id);
   await FirebaseService.deleteMember(testMember.id);
+  await FirebaseService.deleteMember(memberWithEmptyFields.id);
   assertionsPassed++;
   console.log('  ✅ PASS: Cascading deletion of budgets, transactions, and members verified');
 

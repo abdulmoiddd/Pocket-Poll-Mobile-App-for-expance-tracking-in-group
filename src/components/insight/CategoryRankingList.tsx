@@ -63,20 +63,22 @@ export const CategoryRankingList: React.FC<CategoryRankingListProps> = ({
                 <View style={[styles.iconBox, { backgroundColor: cat.lightColor }]}>
                   {getCategoryIcon(cat.category, cat.color)}
                 </View>
-                <View>
-                  <Text style={styles.name}>{cat.category}</Text>
-                  <Text style={styles.txCount}>
+                <View style={styles.catTextCol}>
+                  <Text style={styles.name} numberOfLines={1} ellipsizeMode="tail">
+                    {cat.category}
+                  </Text>
+                  <Text style={styles.txCount} numberOfLines={1}>
                     {cat.transactionCount} {cat.transactionCount === 1 ? 'transaction' : 'transactions'}
                   </Text>
                 </View>
               </View>
 
               <View style={styles.right}>
-                <Text style={styles.amount}>
+                <Text style={styles.amount} numberOfLines={1} ellipsizeMode="tail">
                   {formatCurrency(cat.amount, currencySymbol)}
                 </Text>
                 <View style={styles.percentPill}>
-                  <Text style={[styles.percentText, { color: cat.color }]}>
+                  <Text style={[styles.percentText, { color: cat.color }]} numberOfLines={1}>
                     {cat.percentage}%
                   </Text>
                 </View>
@@ -129,9 +131,14 @@ const styles = StyleSheet.create({
     paddingVertical: 4,
   },
   left: {
+    flex: 1,
     flexDirection: 'row',
     alignItems: 'center',
     gap: 12,
+    marginRight: 8,
+  },
+  catTextCol: {
+    flex: 1,
   },
   iconBox: {
     width: 38,
@@ -139,6 +146,7 @@ const styles = StyleSheet.create({
     borderRadius: 12,
     alignItems: 'center',
     justifyContent: 'center',
+    flexShrink: 0,
   },
   name: {
     fontSize: 14,
@@ -153,6 +161,7 @@ const styles = StyleSheet.create({
   right: {
     alignItems: 'flex-end',
     gap: 3,
+    flexShrink: 0,
   },
   amount: {
     fontSize: 15,

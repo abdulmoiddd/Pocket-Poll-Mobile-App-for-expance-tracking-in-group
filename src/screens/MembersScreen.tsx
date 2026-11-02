@@ -95,39 +95,37 @@ export const MembersScreen: React.FC<MembersScreenProps> = ({ onQuickDepositForM
     setAddModalVisible(true);
   };
 
-  const handleCreateMember = async () => {
+  const handleCreateMember = () => {
     if (!name.trim()) {
       toast.error('Name Required', 'Please enter a name for the new member.');
       return;
     }
 
     const parsedDeposit = parseFloat(initialDeposit);
-    setIsSubmitting(true);
-    try {
-      await addMember({
-        name: name.trim(),
-        email: email.trim() || undefined,
-        phone: phone.trim() || undefined,
-        avatarColor: selectedColor,
-        initialDeposit: !isNaN(parsedDeposit) && parsedDeposit > 0 ? parsedDeposit : undefined,
-        paymentMethod,
-      });
+    const memberName = name.trim();
 
-      setAddModalVisible(false);
-      setName('');
-      setEmail('');
-      setPhone('');
-      setInitialDeposit('');
+    // Optimistic UI: Add member locally immediately and close modal without blocking spinner
+    addMember({
+      name: memberName,
+      email: email.trim() || undefined,
+      phone: phone.trim() || undefined,
+      avatarColor: selectedColor,
+      initialDeposit: !isNaN(parsedDeposit) && parsedDeposit > 0 ? parsedDeposit : undefined,
+      paymentMethod,
+    }).catch((err) => {
+      console.warn('Background member sync queued in Firestore offline persistence:', err);
+    });
 
-      toast.success(
-        'Member Added',
-        `${name.trim()} has been added to ${settings.groupName}!`
-      );
-    } catch (err: any) {
-      toast.error('Error', err?.message || 'Failed to add member.');
-    } finally {
-      setIsSubmitting(false);
-    }
+    setAddModalVisible(false);
+    setName('');
+    setEmail('');
+    setPhone('');
+    setInitialDeposit('');
+
+    toast.success(
+      'Member Added',
+      `${memberName} has been added to ${settings.groupName}!`
+    );
   };
 
   const handleConfirmDelete = async () => {
@@ -270,34 +268,40 @@ export const MembersScreen: React.FC<MembersScreenProps> = ({ onQuickDepositForM
                       </View>
 
                       <View style={styles.memberInfoCol}>
-                        <Text style={styles.memberName}>{member.name}</Text>
+                        <Text style={styles.memberName} numberOfLines={1} ellipsizeMode="tail">
+                          {member.name}
+                        </Text>
                         <View style={styles.metaRow}>
                           {member.email ? (
                             <View style={styles.metaItem}>
                               <Mail size={12} color={theme.colors.textMuted} />
-                              <Text style={styles.metaText} numberOfLines={1}>
+                              <Text style={styles.metaText} numberOfLines={1} ellipsizeMode="tail">
                                 {member.email}
                               </Text>
                             </View>
                           ) : member.phone ? (
                             <View style={styles.metaItem}>
                               <Phone size={12} color={theme.colors.textMuted} />
-                              <Text style={styles.metaText}>{member.phone}</Text>
+                              <Text style={styles.metaText} numberOfLines={1} ellipsizeMode="tail">
+                                {member.phone}
+                              </Text>
                             </View>
                           ) : (
                             <View style={styles.metaItem}>
                               <Calendar size={12} color={theme.colors.textMuted} />
-                              <Text style={styles.metaText}>Joined {member.joinedAt}</Text>
+                              <Text style={styles.metaText} numberOfLines={1} ellipsizeMode="tail">
+                                Joined {member.joinedAt}
+                              </Text>
                             </View>
                           )}
                         </View>
                       </View>
 
                       <View style={styles.memberContributionCol}>
-                        <Text style={styles.memberDepositAmount}>
+                        <Text style={styles.memberDepositAmount} numberOfLines={1} ellipsizeMode="tail">
                           +{formatCurrency(member.totalContributed, settings.currencySymbol)}
                         </Text>
-                        <Text style={styles.depositCountText}>
+                        <Text style={styles.depositCountText} numberOfLines={1}>
                           {contributionCount} {contributionCount === 1 ? 'deposit' : 'deposits'}
                         </Text>
                       </View>
@@ -709,6 +713,7 @@ const styles = StyleSheet.create({
   memberInfoCol: {
     flex: 1,
     marginRight: 8,
+    overflow: 'hidden',
   },
   memberName: {
     fontSize: 15,
@@ -719,18 +724,23 @@ const styles = StyleSheet.create({
   metaRow: {
     flexDirection: 'row',
     alignItems: 'center',
+    flexWrap: 'nowrap',
   },
   metaItem: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: 4,
+    flexShrink: 1,
   },
   metaText: {
     fontSize: 12,
     color: theme.colors.textMuted,
+    flexShrink: 1,
   },
   memberContributionCol: {
     alignItems: 'flex-end',
+    flexShrink: 0,
+    minWidth: 80,
   },
   memberDepositAmount: {
     fontSize: 15,

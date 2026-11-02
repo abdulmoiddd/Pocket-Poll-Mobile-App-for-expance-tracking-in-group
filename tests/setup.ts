@@ -175,6 +175,21 @@ const memoryStore = new Map<string, string>();
         return { type: 'doc', id: docId, colPath, path: fullPath };
       },
       setDoc: async (docRef: any, data: any) => {
+        // Strict Firestore simulation: Reject payloads containing undefined values
+        function checkUndefined(val: any, path: string = '') {
+          if (val === undefined) {
+            throw new Error(
+              `Function setDoc() called with invalid data. Unsupported field value: undefined (found in field ${path})`
+            );
+          }
+          if (val && typeof val === 'object' && !Array.isArray(val)) {
+            for (const [k, v] of Object.entries(val)) {
+              checkUndefined(v, path ? `${path}.${k}` : k);
+            }
+          }
+        }
+        checkUndefined(data);
+
         const col = getColMap(docRef.colPath);
         col.set(docRef.id, { ...data });
         if (!isNetworkOnline) {

@@ -359,25 +359,35 @@ export const DashboardScreen: React.FC<DashboardScreenProps> = ({
                 <View style={styles.detailsList}>
                   <View style={styles.detailRow}>
                     <Text style={styles.detailLabel}>Member</Text>
-                    <Text style={styles.detailValue}>{selectedTx.memberName}</Text>
+                    <Text style={styles.detailValue} numberOfLines={1} ellipsizeMode="tail">
+                      {selectedTx.memberName}
+                    </Text>
                   </View>
 
                   <View style={styles.detailRow}>
                     <Text style={styles.detailLabel}>Payment Method</Text>
-                    <Text style={styles.detailValue}>{selectedTx.paymentMethod}</Text>
+                    <Text style={styles.detailValue} numberOfLines={1} ellipsizeMode="tail">
+                      {selectedTx.paymentMethod}
+                    </Text>
                   </View>
 
                   {selectedTx.notes ? (
                     <View style={styles.detailRow}>
                       <Text style={styles.detailLabel}>Description / Notes</Text>
-                      <Text style={styles.detailValue}>{selectedTx.notes}</Text>
+                      <Text style={styles.detailValue} numberOfLines={3} ellipsizeMode="tail">
+                        {selectedTx.notes}
+                      </Text>
                     </View>
                   ) : null}
 
                   {selectedTx.receiptName ? (
                     <View style={styles.detailRow}>
                       <Text style={styles.detailLabel}>Receipt File</Text>
-                      <Text style={[styles.detailValue, { color: theme.colors.primary }]}>
+                      <Text
+                        style={[styles.detailValue, { color: theme.colors.primary }]}
+                        numberOfLines={1}
+                        ellipsizeMode="tail"
+                      >
                         📎 {selectedTx.receiptName}
                       </Text>
                     </View>
@@ -717,7 +727,8 @@ const styles = StyleSheet.create({
   detailRow: {
     flexDirection: 'row',
     justifyContent: 'space-between',
-    paddingVertical: 6,
+    alignItems: 'center',
+    paddingVertical: 8,
     borderBottomWidth: 1,
     borderBottomColor: '#F1F5F9',
   },
@@ -725,11 +736,15 @@ const styles = StyleSheet.create({
     fontSize: 13,
     color: theme.colors.textMuted,
     fontWeight: '500',
+    marginRight: 12,
+    flexShrink: 0,
   },
   detailValue: {
     fontSize: 13,
     fontWeight: '600',
     color: theme.colors.textPrimary,
+    flex: 1,
+    textAlign: 'right',
   },
   modalButtonRow: {
     flexDirection: 'row',

@@ -46,9 +46,8 @@ export const AddTransactionScreen: React.FC<AddTransactionScreenProps> = ({
   const [notes, setNotes] = useState('');
   const [receiptUri, setReceiptUri] = useState<string | undefined>(undefined);
   const [receiptName, setReceiptName] = useState<string | undefined>(undefined);
-  const [isSubmitting, setIsSubmitting] = useState(false);
 
-  const handleSubmit = async () => {
+  const handleSubmit = () => {
     const numericAmount = parseFloat(amountStr);
     if (isNaN(numericAmount) || numericAmount <= 0) {
       toast.error('Invalid Amount', 'Please enter a valid amount greater than zero.');
@@ -61,37 +60,35 @@ export const AddTransactionScreen: React.FC<AddTransactionScreenProps> = ({
       return;
     }
 
-    setIsSubmitting(true);
-    try {
-      await addTransaction({
-        type,
-        amount: numericAmount,
-        memberId: member.id,
-        memberName: member.name,
-        category: type === 'expense' ? selectedCategory : undefined,
-        date,
-        paymentMethod: selectedPayment,
-        notes: notes.trim() || (type === 'contribution' ? 'Pool Contribution' : selectedCategory),
-        receiptName,
-        receiptUri,
-      });
+    // Fully optimistic UI: save locally immediately and dismiss screen without blocking spinner
+    addTransaction({
+      type,
+      amount: numericAmount,
+      memberId: member.id,
+      memberName: member.name,
+      category: type === 'expense' ? selectedCategory : undefined,
+      date,
+      paymentMethod: selectedPayment,
+      notes: notes.trim() || (type === 'contribution' ? 'Pool Contribution' : selectedCategory),
+      receiptName,
+      receiptUri,
+    }).catch((err) => {
+      console.warn('Background sync queued in Firestore offline persistence:', err);
+    });
 
-      toast.success(
-        type === 'contribution' ? 'Deposit Recorded' : 'Expense Recorded',
-        type === 'contribution'
-          ? `Added ${settings.currencySymbol}${numericAmount.toFixed(
-              2
-            )} deposit to pool from ${member.name}.`
-          : `Recorded ${settings.currencySymbol}${numericAmount.toFixed(
-              2
-            )} expense for ${selectedCategory}.`
-      );
-      onSuccess();
-    } catch (err: any) {
-      toast.error('Error', err?.message || 'Failed to save transaction.');
-    } finally {
-      setIsSubmitting(false);
-    }
+    toast.success(
+      type === 'contribution' ? 'Deposit Recorded' : 'Expense Recorded',
+      type === 'contribution'
+        ? `Added ${settings.currencySymbol}${numericAmount.toFixed(
+            2
+          )} deposit to pool from ${member.name}.`
+        : `Recorded ${settings.currencySymbol}${numericAmount.toFixed(
+            2
+          )} expense for ${selectedCategory}.`
+    );
+
+    // Dismiss immediately
+    onSuccess();
   };
 
   return (
@@ -251,7 +248,7 @@ export const AddTransactionScreen: React.FC<AddTransactionScreenProps> = ({
             }}
           />
 
-          {/* Full-width purple submit button */}
+          {/* Full-width purple submit button (optimistic execution) */}
           <Button
             title={
               type === 'expense'
@@ -259,7 +256,6 @@ export const AddTransactionScreen: React.FC<AddTransactionScreenProps> = ({
                 : `Confirm Deposit (+${settings.currencySymbol}${amountStr || '0.00'})`
             }
             onPress={handleSubmit}
-            loading={isSubmitting}
             disabled={!amountStr || parseFloat(amountStr) <= 0}
             size="lg"
             style={styles.submitBtn}

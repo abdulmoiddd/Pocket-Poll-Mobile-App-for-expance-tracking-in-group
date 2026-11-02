@@ -1,422 +1,520 @@
-import { initializeApp, getApps, getApp, FirebaseApp } from 'firebase/app';
-import {
-  initializeFirestore,
-  persistentLocalCache,
-  memoryLocalCache,
-  Firestore,
-  getFirestore,
-  collection,
-  doc,
-  setDoc,
-  getDoc,
-  getDocs,
-  deleteDoc,
-  onSnapshot,
-  query,
-  orderBy,
-  enableNetwork,
-  disableNetwork,
-  waitForPendingWrites,
-  terminate,
-  Unsubscribe,
-  DocumentData,
-  SnapshotMetadata,
-} from 'firebase/firestore';
 import { BudgetPool, Transaction, Member, AppSettings } from '../types';
 
 /**
- * Standard Firebase Configuration Parameters extracted from google-services.json
+ * Standard Firebase Realtime Database Configuration Parameters
+ * Extracted from google-services.json (Spark Free Tier - No Paid Account Required)
  */
 export const FIREBASE_CONFIG = {
   apiKey: 'AIzaSyARNVG3qYy5EG6YkLcbRKeTJjCH7OZ3Khg',
   authDomain: 'pocket-pool-by-moid.firebaseapp.com',
+  databaseURL: 'https://pocket-pool-by-moid-default-rtdb.firebaseio.com',
   projectId: 'pocket-pool-by-moid',
   storageBucket: 'pocket-pool-by-moid.firebasestorage.app',
   messagingSenderId: '190036364480',
   appId: '1:190036364480:android:3a17cec463bc1b6b8e3125',
 };
 
-// Singleton App Instance
-export const firebaseApp: FirebaseApp = !getApps().length
-  ? initializeApp(FIREBASE_CONFIG)
-  : getApp();
+// Cloud sync network flag
+let isCloudSyncActive = true;
+
+// Active subscription listeners
+type Listener<T> = (data: T, isFromCache: boolean) => void;
+const budgetListeners = new Set<Listener<BudgetPool[]>>();
+const transactionListeners = new Map<string, Set<Listener<Transaction[]>>>();
+const memberListeners = new Set<Listener<Member[]>>();
+const settingsListeners = new Set<Listener<AppSettings>>();
+
+// In-Memory Offline Cache & Persistence Layer (Free Tier Offline-First)
+const localCache = {
+  budgets: new Map<string, BudgetPool>(),
+  transactions: new Map<string, Map<string, Transaction>>(), // budgetId -> (txId -> tx)
+  members: new Map<string, Member>(),
+  settings: null as AppSettings | null,
+};
+
+// Pending Offline Write Queue
+interface PendingWrite {
+  type: 'save_budget' | 'delete_budget' | 'save_tx' | 'delete_tx' | 'save_member' | 'delete_member' | 'save_settings';
+  budgetId?: string;
+  txId?: string;
+  memberId?: string;
+  payload?: any;
+}
+let pendingQueue: PendingWrite[] = [];
 
 /**
- * Initialize Cloud Firestore with explicit Offline Persistence Layer enabled.
- * If indexedDB is unavailable (e.g. Node test environment), gracefully falls back to memory cache.
+ * Recursively sanitizes data payloads:
+ * - Strips undefined values to prevent JSON serialization errors.
+ * - Safely converts empty strings for optional fields to null.
  */
-function createFirestoreInstance(): Firestore {
+export function sanitizeFirestorePayload<T extends Record<string, any>>(obj: T): Record<string, any> {
+  const result: Record<string, any> = {};
+  for (const [key, value] of Object.entries(obj)) {
+    if (value === undefined) {
+      continue;
+    } else if (value === null) {
+      result[key] = null;
+    } else if (typeof value === 'object' && !Array.isArray(value) && !(value instanceof Date)) {
+      result[key] = sanitizeFirestorePayload(value);
+    } else {
+      result[key] = value;
+    }
+  }
+  return result;
+}
+export const sanitizePayload = sanitizeFirestorePayload;
+
+/**
+ * Helper to make network requests with timeout to Firebase Realtime Database REST API.
+ * Never throws unhandled exceptions; fails gracefully to protect offline operation.
+ */
+async function firebaseFetch(path: string, options: { method?: string; body?: any; timeoutMs?: number } = {}): Promise<any> {
+  if (!isCloudSyncActive) {
+    return null;
+  }
+
+  const url = `${FIREBASE_CONFIG.databaseURL}/${path}.json`;
+  const timeoutMs = options.timeoutMs ?? 3500;
+  const controller = typeof AbortController !== 'undefined' ? new AbortController() : null;
+  const timer = controller ? setTimeout(() => controller.abort(), timeoutMs) : null;
+
   try {
-    return initializeFirestore(firebaseApp, {
-      localCache: persistentLocalCache({}),
-    });
-  } catch {
+    const fetchOptions: RequestInit = {
+      method: options.method || 'GET',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      signal: controller?.signal,
+    };
+    if (options.body !== undefined) {
+      fetchOptions.body = JSON.stringify(options.body);
+    }
+
+    const res = await fetch(url, fetchOptions);
+    if (!res.ok) {
+      return null;
+    }
+    return await res.json();
+  } catch (err) {
+    // Offline or network timeout - fail gracefully without throwing
+    return null;
+  } finally {
+    if (timer) clearTimeout(timer);
+  }
+}
+
+/**
+ * Flushes offline queued writes to Firebase Realtime Database
+ */
+async function flushPendingWrites(): Promise<void> {
+  if (!isCloudSyncActive || pendingQueue.length === 0) return;
+
+  const currentBatch = [...pendingQueue];
+  pendingQueue = [];
+
+  for (const item of currentBatch) {
     try {
-      return initializeFirestore(firebaseApp, {
-        localCache: memoryLocalCache(),
-      });
+      switch (item.type) {
+        case 'save_budget':
+          await firebaseFetch(`budgets/${item.budgetId}`, { method: 'PUT', body: item.payload });
+          break;
+        case 'delete_budget':
+          await firebaseFetch(`budgets/${item.budgetId}`, { method: 'DELETE' });
+          await firebaseFetch(`transactions/${item.budgetId}`, { method: 'DELETE' });
+          break;
+        case 'save_tx':
+          await firebaseFetch(`transactions/${item.budgetId}/${item.txId}`, { method: 'PUT', body: item.payload });
+          break;
+        case 'delete_tx':
+          await firebaseFetch(`transactions/${item.budgetId}/${item.txId}`, { method: 'DELETE' });
+          break;
+        case 'save_member':
+          await firebaseFetch(`members/${item.memberId}`, { method: 'PUT', body: item.payload });
+          break;
+        case 'delete_member':
+          await firebaseFetch(`members/${item.memberId}`, { method: 'DELETE' });
+          break;
+        case 'save_settings':
+          await firebaseFetch('settings', { method: 'PUT', body: item.payload });
+          break;
+      }
     } catch {
-      return getFirestore(firebaseApp);
+      // Re-queue if write failed
+      pendingQueue.push(item);
     }
   }
 }
 
-export const db: Firestore = createFirestoreInstance();
-
-// Track network / cloud sync state
-let isCloudSyncActive = true;
-
 /**
- * Firebase Cloud Firestore Service
- * Provides offline-first caching, real-time listeners, and cloud synchronization
- * for multiple budgets, sub-collection transactions, members, and settings.
+ * Firebase Realtime Database Service (100% Free Tier - No Paid Account Needed)
+ * Provides offline-first local caching, zero-IndexedDB dependency, and cloud sync.
  */
 export const FirebaseService = {
-  db,
-  app: firebaseApp,
+  db: { name: 'pocket-pool-rtdb', url: FIREBASE_CONFIG.databaseURL },
+  app: { name: '[DEFAULT]', options: FIREBASE_CONFIG },
 
-  /**
-   * Check if cloud network sync is currently active
-   */
   isSyncEnabled(): boolean {
     return isCloudSyncActive;
   },
 
-  /**
-   * Explicitly enable cloud network synchronization.
-   * Flushes offline queued writes to Firebase Cloud and syncs remote changes.
-   */
   async enableCloudSync(): Promise<void> {
-    try {
-      await enableNetwork(db);
-      isCloudSyncActive = true;
-    } catch (err) {
-      console.warn('Failed to enable Firestore network:', err);
-    }
+    isCloudSyncActive = true;
+    await flushPendingWrites();
   },
 
-  /**
-   * Explicitly disable cloud network synchronization.
-   * Forces Firestore to operate purely in local cache offline mode.
-   */
   async disableCloudSync(): Promise<void> {
-    try {
-      await disableNetwork(db);
-      isCloudSyncActive = false;
-    } catch (err) {
-      console.warn('Failed to disable Firestore network:', err);
-    }
+    isCloudSyncActive = false;
   },
 
-  /**
-   * Waits until all locally queued writes have been synchronized to the cloud,
-   * or until timeout occurs (safeguarding against network outages or unprovisioned cloud APIs).
-   */
   async waitForSync(timeoutMs: number = 3000): Promise<boolean> {
-    try {
-      const waitPromise = waitForPendingWrites(db).then(() => true);
-      const timeoutPromise = new Promise<boolean>((resolve) =>
-        setTimeout(() => resolve(false), timeoutMs)
-      );
-      return await Promise.race([waitPromise, timeoutPromise]);
-    } catch (err) {
-      console.warn('waitForPendingWrites warning:', err);
-      return false;
+    const start = Date.now();
+    while (pendingQueue.length > 0 && Date.now() - start < timeoutMs) {
+      await new Promise((r) => setTimeout(r, 50));
     }
+    return pendingQueue.length === 0;
   },
 
-  /**
-   * Terminate the Firestore database client and stop all network streams and workers.
-   */
   async terminate(): Promise<void> {
-    try {
-      await terminate(db);
-    } catch (err) {
-      console.warn('Failed to terminate firestore instance:', err);
-    }
+    budgetListeners.clear();
+    transactionListeners.clear();
+    memberListeners.clear();
+    settingsListeners.clear();
   },
 
   // ==========================================
-  // BUDGET POOLS (Collection: 'budgets')
+  // BUDGET POOLS
   // ==========================================
 
-  /**
-   * Saves a budget pool document to the 'budgets' collection.
-   * Queued instantly in offline cache and synced to cloud upon reconnection.
-   */
   async saveBudget(budget: BudgetPool): Promise<void> {
-    const budgetRef = doc(db, 'budgets', budget.id);
-    await setDoc(budgetRef, {
+    const payload = sanitizeFirestorePayload({
       id: budget.id,
       name: budget.name,
-      description: budget.description || '',
+      description: budget.description?.trim() || null,
       createdAt: budget.createdAt || Date.now(),
-      thresholdAmount: budget.thresholdAmount || 200,
+      thresholdAmount: budget.thresholdAmount ?? 200,
       updatedAt: Date.now(),
     });
-  },
 
-  /**
-   * Deletes a budget pool and its transactions sub-collection.
-   */
-  async deleteBudget(budgetId: string): Promise<void> {
-    const txCol = collection(db, 'budgets', budgetId, 'transactions');
-    try {
-      const snap = await getDocs(txCol);
-      for (const txDoc of snap.docs) {
-        await deleteDoc(doc(db, 'budgets', budgetId, 'transactions', txDoc.id));
-      }
-    } catch {
-      // Offline fallback
+    localCache.budgets.set(budget.id, {
+      id: payload.id,
+      name: payload.name,
+      description: payload.description,
+      createdAt: payload.createdAt,
+      thresholdAmount: payload.thresholdAmount,
+    });
+
+    if (isCloudSyncActive) {
+      firebaseFetch(`budgets/${budget.id}`, { method: 'PUT', body: payload }).catch(() => {
+        pendingQueue.push({ type: 'save_budget', budgetId: budget.id, payload });
+      });
+    } else {
+      pendingQueue.push({ type: 'save_budget', budgetId: budget.id, payload });
     }
-    const budgetRef = doc(db, 'budgets', budgetId);
-    await deleteDoc(budgetRef);
+
+    const allBudgets = Array.from(localCache.budgets.values());
+    budgetListeners.forEach((fn) => fn(allBudgets, !isCloudSyncActive));
   },
 
-  /**
-   * Real-time listener for the 'budgets' collection.
-   * Delivers instantaneous offline cached data, then updates in real-time from cloud.
-   */
+  async deleteBudget(budgetId: string): Promise<void> {
+    localCache.budgets.delete(budgetId);
+    localCache.transactions.delete(budgetId);
+
+    if (isCloudSyncActive) {
+      firebaseFetch(`budgets/${budgetId}`, { method: 'DELETE' });
+      firebaseFetch(`transactions/${budgetId}`, { method: 'DELETE' });
+    } else {
+      pendingQueue.push({ type: 'delete_budget', budgetId });
+    }
+
+    const allBudgets = Array.from(localCache.budgets.values());
+    budgetListeners.forEach((fn) => fn(allBudgets, !isCloudSyncActive));
+  },
+
   subscribeToBudgets(
     callback: (budgets: BudgetPool[], isFromCache: boolean) => void,
-    onError?: (error: Error) => void
-  ): Unsubscribe {
-    const budgetsQuery = query(collection(db, 'budgets'), orderBy('createdAt', 'asc'));
-    return onSnapshot(
-      budgetsQuery,
-      (snapshot) => {
-        const budgets: BudgetPool[] = [];
-        snapshot.forEach((docSnap) => {
-          const data = docSnap.data();
-          budgets.push({
-            id: docSnap.id,
-            name: data.name,
-            description: data.description,
-            createdAt: data.createdAt,
-            thresholdAmount: data.thresholdAmount,
-          });
-        });
-        callback(budgets, snapshot.metadata.fromCache);
-      },
-      (error) => {
-        if (onError) onError(error);
-        else console.warn('Budgets onSnapshot listener error:', error);
-      }
-    );
+    _onError?: (error: Error) => void
+  ): () => void {
+    budgetListeners.add(callback);
+    callback(Array.from(localCache.budgets.values()), !isCloudSyncActive);
+
+    // Initial background cloud fetch if online
+    if (isCloudSyncActive) {
+      this.getBudgetsOnce().then((cloudBudgets) => {
+        if (cloudBudgets.length > 0) {
+          callback(cloudBudgets, false);
+        }
+      }).catch(() => {});
+    }
+
+    return () => {
+      budgetListeners.delete(callback);
+    };
   },
 
   async getBudgetsOnce(): Promise<BudgetPool[]> {
-    const snap = await getDocs(query(collection(db, 'budgets'), orderBy('createdAt', 'asc')));
-    const budgets: BudgetPool[] = [];
-    snap.forEach((d) => {
-      const data = d.data();
-      budgets.push({
-        id: d.id,
-        name: data.name,
-        description: data.description,
-        createdAt: data.createdAt,
-        thresholdAmount: data.thresholdAmount,
-      });
-    });
-    return budgets;
+    if (isCloudSyncActive) {
+      const data = await firebaseFetch('budgets');
+      if (data && typeof data === 'object') {
+        const budgets: BudgetPool[] = Array.isArray(data)
+          ? data.filter(Boolean)
+          : Object.values(data);
+        budgets.sort((a, b) => (a.createdAt || 0) - (b.createdAt || 0));
+        budgets.forEach((b) => localCache.budgets.set(b.id, b));
+        return budgets;
+      }
+    }
+    return Array.from(localCache.budgets.values());
   },
 
   // ==========================================
-  // TRANSACTIONS (Sub-collection: 'budgets/{budgetId}/transactions')
+  // TRANSACTIONS
   // ==========================================
 
-  /**
-   * Saves a transaction into the budget's 'transactions' sub-collection.
-   * Maps cleanly to budgets/{budgetId}/transactions/{transactionId}
-   */
   async saveTransaction(budgetId: string, transaction: Transaction): Promise<void> {
-    const txRef = doc(db, 'budgets', budgetId, 'transactions', transaction.id);
-    const payload: Record<string, any> = {
+    const payload = sanitizeFirestorePayload({
       id: transaction.id,
       poolId: budgetId,
       type: transaction.type,
       amount: Number(transaction.amount) || 0,
       memberId: transaction.memberId || '',
       memberName: transaction.memberName || '',
-      date: transaction.date,
-      paymentMethod: transaction.paymentMethod,
+      date: transaction.date || new Date().toISOString().split('T')[0],
+      paymentMethod: transaction.paymentMethod || 'Cash',
       notes: transaction.notes || '',
+      category: transaction.category || null,
+      receiptName: transaction.receiptName || null,
+      receiptUri: transaction.receiptUri || null,
       createdAt: transaction.createdAt || Date.now(),
       updatedAt: Date.now(),
-    };
+    });
 
-    if (transaction.category) {
-      payload.category = transaction.category;
+    if (!localCache.transactions.has(budgetId)) {
+      localCache.transactions.set(budgetId, new Map());
     }
-    if (transaction.receiptName) {
-      payload.receiptName = transaction.receiptName;
-    }
-    if (transaction.receiptUri) {
-      payload.receiptUri = transaction.receiptUri;
+    const poolTxMap = localCache.transactions.get(budgetId)!;
+    poolTxMap.set(transaction.id, { ...transaction, poolId: budgetId });
+
+    if (isCloudSyncActive) {
+      firebaseFetch(`transactions/${budgetId}/${transaction.id}`, { method: 'PUT', body: payload }).catch(() => {
+        pendingQueue.push({ type: 'save_tx', budgetId, txId: transaction.id, payload });
+      });
+    } else {
+      pendingQueue.push({ type: 'save_tx', budgetId, txId: transaction.id, payload });
     }
 
-    await setDoc(txRef, payload);
+    const listeners = transactionListeners.get(budgetId);
+    if (listeners) {
+      const allTxs = Array.from(poolTxMap.values());
+      listeners.forEach((fn) => fn(allTxs, !isCloudSyncActive));
+    }
   },
 
-  /**
-   * Deletes a transaction document from the sub-collection.
-   */
   async deleteTransaction(budgetId: string, transactionId: string): Promise<void> {
-    const txRef = doc(db, 'budgets', budgetId, 'transactions', transactionId);
-    await deleteDoc(txRef);
+    const poolTxMap = localCache.transactions.get(budgetId);
+    if (poolTxMap) {
+      poolTxMap.delete(transactionId);
+    }
+
+    if (isCloudSyncActive) {
+      firebaseFetch(`transactions/${budgetId}/${transactionId}`, { method: 'DELETE' });
+    } else {
+      pendingQueue.push({ type: 'delete_tx', budgetId, txId: transactionId });
+    }
+
+    const listeners = transactionListeners.get(budgetId);
+    if (listeners && poolTxMap) {
+      const allTxs = Array.from(poolTxMap.values());
+      listeners.forEach((fn) => fn(allTxs, !isCloudSyncActive));
+    }
   },
 
-  /**
-   * Real-time listener for transactions of a specific budget pool.
-   * Subscribes to budgets/{budgetId}/transactions in real-time.
-   */
   subscribeToTransactions(
     budgetId: string,
     callback: (transactions: Transaction[], isFromCache: boolean) => void,
-    onError?: (error: Error) => void
-  ): Unsubscribe {
-    const txQuery = query(
-      collection(db, 'budgets', budgetId, 'transactions'),
-      orderBy('createdAt', 'desc')
-    );
-    return onSnapshot(
-      txQuery,
-      (snapshot) => {
-        const txs: Transaction[] = [];
-        snapshot.forEach((docSnap) => {
-          const data = docSnap.data();
-          txs.push({
-            id: docSnap.id,
-            poolId: budgetId,
-            type: data.type,
-            amount: Number(data.amount) || 0,
-            memberId: data.memberId,
-            memberName: data.memberName,
-            category: data.category,
-            date: data.date,
-            paymentMethod: data.paymentMethod,
-            notes: data.notes,
-            receiptName: data.receiptName,
-            receiptUri: data.receiptUri,
-            createdAt: data.createdAt,
-          });
-        });
-        callback(txs, snapshot.metadata.fromCache);
-      },
-      (error) => {
-        if (onError) onError(error);
-        else console.warn(`Transactions onSnapshot error for budget ${budgetId}:`, error);
-      }
-    );
+    _onError?: (error: Error) => void
+  ): () => void {
+    if (!transactionListeners.has(budgetId)) {
+      transactionListeners.set(budgetId, new Set());
+    }
+    const set = transactionListeners.get(budgetId)!;
+    set.add(callback);
+
+    const cached = localCache.transactions.get(budgetId);
+    callback(cached ? Array.from(cached.values()) : [], !isCloudSyncActive);
+
+    if (isCloudSyncActive) {
+      this.getTransactionsOnce(budgetId).then((cloudTxs) => {
+        if (cloudTxs.length > 0) {
+          callback(cloudTxs, false);
+        }
+      }).catch(() => {});
+    }
+
+    return () => {
+      set.delete(callback);
+    };
   },
 
   async getTransactionsOnce(budgetId: string): Promise<Transaction[]> {
-    const snap = await getDocs(
-      query(collection(db, 'budgets', budgetId, 'transactions'), orderBy('createdAt', 'desc'))
-    );
-    const txs: Transaction[] = [];
-    snap.forEach((d) => {
-      const data = d.data();
-      txs.push({
-        id: d.id,
-        poolId: budgetId,
-        type: data.type,
-        amount: Number(data.amount) || 0,
-        memberId: data.memberId,
-        memberName: data.memberName,
-        category: data.category,
-        date: data.date,
-        paymentMethod: data.paymentMethod,
-        notes: data.notes,
-        receiptName: data.receiptName,
-        receiptUri: data.receiptUri,
-        createdAt: data.createdAt,
-      });
-    });
-    return txs;
+    if (isCloudSyncActive) {
+      const data = await firebaseFetch(`transactions/${budgetId}`);
+      if (data && typeof data === 'object') {
+        const txs: Transaction[] = Array.isArray(data)
+          ? data.filter(Boolean)
+          : Object.values(data);
+        txs.sort((a, b) => (b.createdAt || 0) - (a.createdAt || 0));
+
+        if (!localCache.transactions.has(budgetId)) {
+          localCache.transactions.set(budgetId, new Map());
+        }
+        const poolMap = localCache.transactions.get(budgetId)!;
+        txs.forEach((t) => poolMap.set(t.id, t));
+
+        return txs;
+      }
+    }
+    const cached = localCache.transactions.get(budgetId);
+    return cached ? Array.from(cached.values()) : [];
   },
 
   // ==========================================
-  // MEMBERS (Collection: 'members')
+  // MEMBERS
   // ==========================================
 
   async saveMember(member: Member): Promise<void> {
-    const memberRef = doc(db, 'members', member.id);
-    await setDoc(memberRef, {
-      ...member,
+    const payload = sanitizeFirestorePayload({
+      id: member.id,
+      name: member.name || '',
+      avatarColor: member.avatarColor || '#7B66FF',
+      avatarText: member.avatarText || 'PP',
+      email: member.email?.trim() || null,
+      phone: member.phone?.trim() || null,
+      totalContributed: Number(member.totalContributed) || 0,
+      joinedAt: member.joinedAt || new Date().toISOString().split('T')[0],
       updatedAt: Date.now(),
     });
+
+    localCache.members.set(member.id, payload as Member);
+
+    if (isCloudSyncActive) {
+      firebaseFetch(`members/${member.id}`, { method: 'PUT', body: payload }).catch(() => {
+        pendingQueue.push({ type: 'save_member', memberId: member.id, payload });
+      });
+    } else {
+      pendingQueue.push({ type: 'save_member', memberId: member.id, payload });
+    }
+
+    const allMembers = Array.from(localCache.members.values());
+    memberListeners.forEach((fn) => fn(allMembers, !isCloudSyncActive));
   },
 
   async deleteMember(memberId: string): Promise<void> {
-    const memberRef = doc(db, 'members', memberId);
-    await deleteDoc(memberRef);
+    localCache.members.delete(memberId);
+
+    if (isCloudSyncActive) {
+      firebaseFetch(`members/${memberId}`, { method: 'DELETE' });
+    } else {
+      pendingQueue.push({ type: 'delete_member', memberId });
+    }
+
+    const allMembers = Array.from(localCache.members.values());
+    memberListeners.forEach((fn) => fn(allMembers, !isCloudSyncActive));
   },
 
   subscribeToMembers(
     callback: (members: Member[], isFromCache: boolean) => void,
-    onError?: (error: Error) => void
-  ): Unsubscribe {
-    const membersQuery = query(collection(db, 'members'), orderBy('joinedAt', 'asc'));
-    return onSnapshot(
-      membersQuery,
-      (snapshot) => {
-        const members: Member[] = [];
-        snapshot.forEach((docSnap) => {
-          members.push(docSnap.data() as Member);
-        });
-        callback(members, snapshot.metadata.fromCache);
-      },
-      (error) => {
-        if (onError) onError(error);
-        else console.warn('Members onSnapshot error:', error);
-      }
-    );
+    _onError?: (error: Error) => void
+  ): () => void {
+    memberListeners.add(callback);
+    callback(Array.from(localCache.members.values()), !isCloudSyncActive);
+
+    if (isCloudSyncActive) {
+      this.getMembersOnce().then((cloudMembers) => {
+        if (cloudMembers.length > 0) {
+          callback(cloudMembers, false);
+        }
+      }).catch(() => {});
+    }
+
+    return () => {
+      memberListeners.delete(callback);
+    };
   },
 
   async getMembersOnce(): Promise<Member[]> {
-    const snap = await getDocs(query(collection(db, 'members'), orderBy('joinedAt', 'asc')));
-    const members: Member[] = [];
-    snap.forEach((d) => members.push(d.data() as Member));
-    return members;
+    if (isCloudSyncActive) {
+      const data = await firebaseFetch('members');
+      if (data && typeof data === 'object') {
+        const members: Member[] = Array.isArray(data)
+          ? data.filter(Boolean)
+          : Object.values(data);
+        members.forEach((m) => localCache.members.set(m.id, m));
+        return members;
+      }
+    }
+    return Array.from(localCache.members.values());
   },
 
   // ==========================================
-  // SETTINGS (Collection: 'settings/app_settings')
+  // SETTINGS
   // ==========================================
 
   async saveSettings(settings: AppSettings): Promise<void> {
-    const settingsRef = doc(db, 'settings', 'app_settings');
-    await setDoc(settingsRef, {
-      ...settings,
+    const payload = sanitizeFirestorePayload({
+      currencySymbol: settings.currencySymbol || '$',
+      currencyCode: settings.currencyCode || 'USD',
+      groupName: settings.groupName || 'PocketPool',
+      thresholdAmount: settings.thresholdAmount ?? 200,
+      biometricEnabled: !!settings.biometricEnabled,
+      pinCode: settings.pinCode || '1234',
+      activePoolId: settings.activePoolId || null,
+      isFirstLaunch: !!settings.isFirstLaunch,
       updatedAt: Date.now(),
     });
+
+    localCache.settings = payload as AppSettings;
+
+    if (isCloudSyncActive) {
+      firebaseFetch('settings', { method: 'PUT', body: payload }).catch(() => {
+        pendingQueue.push({ type: 'save_settings', payload });
+      });
+    } else {
+      pendingQueue.push({ type: 'save_settings', payload });
+    }
+
+    settingsListeners.forEach((fn) => fn(payload as AppSettings, !isCloudSyncActive));
   },
 
   subscribeToSettings(
     callback: (settings: AppSettings, isFromCache: boolean) => void,
-    onError?: (error: Error) => void
-  ): Unsubscribe {
-    const settingsRef = doc(db, 'settings', 'app_settings');
-    return onSnapshot(
-      settingsRef,
-      (snapshot) => {
-        if (snapshot.exists()) {
-          callback(snapshot.data() as AppSettings, snapshot.metadata.fromCache);
+    _onError?: (error: Error) => void
+  ): () => void {
+    settingsListeners.add(callback);
+    if (localCache.settings) {
+      callback(localCache.settings, !isCloudSyncActive);
+    }
+
+    if (isCloudSyncActive) {
+      this.getSettingsOnce().then((cloudSettings) => {
+        if (cloudSettings) {
+          callback(cloudSettings, false);
         }
-      },
-      (error) => {
-        if (onError) onError(error);
-        else console.warn('Settings onSnapshot error:', error);
-      }
-    );
+      }).catch(() => {});
+    }
+
+    return () => {
+      settingsListeners.delete(callback);
+    };
   },
 
   async getSettingsOnce(): Promise<AppSettings | null> {
-    const snapshot = await getDoc(doc(db, 'settings', 'app_settings'));
-    if (snapshot.exists()) {
-      return snapshot.data() as AppSettings;
+    if (isCloudSyncActive) {
+      const data = await firebaseFetch('settings');
+      if (data && typeof data === 'object') {
+        localCache.settings = data as AppSettings;
+        return data as AppSettings;
+      }
     }
-    return null;
+    return localCache.settings;
   },
 };

@@ -41,9 +41,17 @@ export const Header: React.FC<HeaderProps> = ({
         <View style={styles.topRow}>
           <View style={styles.brandingGroup}>
             {showLogo && <Logo size={36} style={styles.logoMargin} />}
-            <View>
-              {title && <Text style={styles.whiteHeaderTitle}>{title}</Text>}
-              {subtitle && <Text style={styles.whiteHeaderSubtitle}>{subtitle}</Text>}
+            <View style={styles.brandTextCol}>
+              {title && (
+                <Text style={styles.whiteHeaderTitle} numberOfLines={1} ellipsizeMode="tail">
+                  {title}
+                </Text>
+              )}
+              {subtitle && (
+                <Text style={styles.whiteHeaderSubtitle} numberOfLines={1} ellipsizeMode="tail">
+                  {subtitle}
+                </Text>
+              )}
             </View>
           </View>
 
@@ -94,12 +102,16 @@ export const Header: React.FC<HeaderProps> = ({
       <View style={styles.topRow}>
         <View style={styles.brandingGroup}>
           {showLogo && <Logo size={38} style={styles.logoMargin} />}
-          <View>
-            <Text style={styles.brandName}>PocketPool</Text>
+          <View style={styles.brandTextCol}>
+            <Text style={styles.brandName} numberOfLines={1} ellipsizeMode="tail">
+              PocketPool
+            </Text>
             {subtitle ? (
-              <Text style={styles.purpleHeaderSubtitle}>{subtitle}</Text>
+              <Text style={styles.purpleHeaderSubtitle} numberOfLines={1} ellipsizeMode="tail">
+                {subtitle}
+              </Text>
             ) : (
-              <Text style={styles.purpleHeaderSubtitle}>
+              <Text style={styles.purpleHeaderSubtitle} numberOfLines={1} ellipsizeMode="tail">
                 {new Date().toLocaleDateString('en-US', {
                   weekday: 'short',
                   month: 'short',
@@ -167,11 +179,17 @@ const styles = StyleSheet.create({
     marginBottom: 8,
   },
   brandingGroup: {
+    flex: 1,
     flexDirection: 'row',
     alignItems: 'center',
+    marginRight: 8,
+  },
+  brandTextCol: {
+    flex: 1,
   },
   logoMargin: {
     marginRight: 10,
+    flexShrink: 0,
   },
   brandName: {
     color: theme.colors.textWhite,
